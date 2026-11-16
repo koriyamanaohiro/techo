@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f5f2e9">
+<title>場所の手帳</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+*{box-sizing:border-box} [hidden]{display:none!important}
+:root{color:#263b35;background:#f5f2e9;font:16px system-ui,sans-serif}
+body{margin:0;padding:env(safe-area-inset-top) max(14px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(14px,env(safe-area-inset-left))}
+main{max-width:960px;margin:auto} h1{font-family:Georgia,"Yu Mincho",serif;font-size:1.65rem;margin:0}
+button,input,textarea,select{font:inherit;color:inherit} button,input,select{min-height:44px;border:1px solid #aab5ac;border-radius:9px;background:#fffdf7;padding:6px 10px}
+button{cursor:pointer} button:disabled{opacity:.45} button[aria-pressed="true"],.primary{background:#2d554a;color:white}
+header,.nav,.row,.mapbar,.tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+header,.nav,.mapbar{justify-content:space-between} header{padding:9px 0}header,.nav{touch-action:pan-y}
+.upper{min-height:calc(50dvh - env(safe-area-inset-top));display:flex;flex-direction:column;gap:7px;padding-bottom:9px}
+.row label{font-size:.8rem}.row input{display:block;max-width:100%;font-size:16px}.row button{align-self:end;font-size:.82rem}
+textarea{width:100%;min-height:68px;flex:1;resize:none;border:1px solid #aab5ac;border-radius:10px;background:#fffdf7;padding:8px 12px;line-height:1.5;overflow-y:auto}
+.tools{justify-content:flex-end}.tools button,.mapbar button{font-size:.79rem}.danger{color:#923b34}
+#map{height:calc(50dvh - 64px - env(safe-area-inset-bottom));min-height:165px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
+.mapbar{margin-bottom:6px}.mapbar label{font-size:.8rem}.mapbar select{min-height:44px}
+.status{font-size:.82rem;margin:4px 0;color:#425a50}.status:empty{display:none}
+#gate{max-width:410px;margin: min(15vh,130px) auto 0;padding:23px;border:1px solid #bfc8bc;border-radius:17px;background:#fffdf7}
+#gate label,#gate input{display:block;width:100%;margin:8px 0}#gate button{margin-top:6px}
+dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);color:inherit;background:#fffdf7}dialog::backdrop{background:#172c25aa}
+@media(min-width:700px){body{padding-inline:24px}.upper{gap:10px}textarea{min-height:135px}}
+</style>
+<main>
+<section id="gate">
+<h1>場所の手帳</h1>
+<p id="intro"></p>
+<form id="access">
+<label>パスワード<input id="password" type="password" required></label>
+<label id="repeatLabel">パスワードをもう一度入力<input id="repeat" type="password" autocomplete="new-password"></label>
+<button class="primary" id="enter"></button>
+</form>
+<p id="gateStatus" class="status" role="status"></p>
+</section>
+<section id="book" hidden>
+<div class="upper">
+<header id="titleBar"><h1>場所の手帳</h1><button id="lock">ロック</button></header>
+<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">‹ 前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ ›</button></nav>
+<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="now">今の日時を入れる</button></div>
+<textarea id="memo" aria-label="メモ" placeholder="ここにメモを書く"></textarea>
+<div class="tools"><button id="undo" hidden>元に戻す</button><button class="danger" id="clear">メモと地図の印を消去</button></div>
+<p class="status" id="saveStatus" role="status"></p>
+</div>
+<div class="mapbar">
+<button id="locate">現在地に戻す</button>
+<button id="mark" aria-pressed="false">丸印を付ける</button>
+<label>色 <select id="color" aria-label="丸印の色"><option value="#bf302f">赤</option><option value="#205cb5">青</option><option value="#267844">緑</option></select></label>
+</div>
+<div id="map" aria-label="OpenStreetMap"></div>
+<p class="status" id="mapStatus" role="status"></p>
+</section>
+<dialog id="confirmClear"><form method="dialog"><p id="clearText"></p><div class="tools"><button value="cancel" autofocus>キャンセル</button><button class="danger" value="clear">消去する</button></div></form></dialog>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const storageId = 'basho-techo-v1';
+const count = 20;
+const blankPage = () => ({date:'', time:'', memo:'', view:null, marks:[]});
+const encode = bytes => btoa(Array.from(new Uint8Array(bytes), byte => String.fromCharCode(byte)).join(''));
+const decode = value => Uint8Array.from(atob(value), c => c.charCodeAt(0));
+const textEncoder = new TextEncoder();
+let key, salt, pages, index = 0, lastSaved, pending = Promise.resolve();
+let map, marksLayer, applyingView = false, marking = false, undo, gesture;
+let requests = new Map();
+let attempted = new Set();
+let session = 0;
+
+async function derive(password, salt) {
+  const material = await crypto.subtle.importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt:decode(salt), iterations:600000, hash:'SHA-256'},
+    material, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+}
+function save() {
+  const snapshot = textEncoder.encode(JSON.stringify(pages));
+  const saveKey = key;
+  const saveSalt = salt;
+  $('saveStatus').textContent = '保存中…';
+  pending = pending.catch(() => {}).then(async () => {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = await crypto.subtle.encrypt({name:'AES-GCM', iv}, saveKey, snapshot);
+    if (localStorage.getItem(storageId) !== lastSaved) throw new Error('storage changed');
+    const record = JSON.stringify({salt:saveSalt, iv:encode(iv), data:encode(data)});
+    localStorage.setItem(storageId, record);
+    lastSaved = record;
+    $('saveStatus').textContent = '';
+  }).catch(error => {
+    $('saveStatus').textContent = '保存できませんでした。別のタブや端末の保存設定をご確認ください。';
+    throw error;
+  });
+  pending.catch(() => {});
+  return pending;
+}
+function showGate() {
+  $('gate').hidden = false;
+  $('book').hidden = true;
+  $('password').value = $('repeat').value = '';
+  try {
+    lastSaved = localStorage.getItem(storageId);
+    const existing = lastSaved !== null;
+    $('intro').textContent = existing ? 'パスワードを入力して手帳を開きます。' :
+      '半角英字4文字と半角数字4桁でパスワードを設定してください。順番は自由です。忘れると内容を復元できません。 iPhone、Android端末、iPadなどでは、手帳のデータは端末ごとに保存されます。端末間でデータを同期したり、移したりすることはできません。';
+    $('repeatLabel').hidden = existing;
+    $('repeat').required = !existing;
+    $('password').autocomplete = existing ? 'current-password' : 'new-password';
+    $('enter').textContent = existing ? '手帳を開く' : '手帳を作る';
+    if (!globalThis.crypto?.subtle) throw new Error('https');
+  } catch {
+    $('gateStatus').textContent = '暗号化と保存を使えるよう、SafariでHTTPSのページとして開いてください。';
+    $('enter').disabled = true;
+  }
+}
+$('access').onsubmit = async event => {
+  event.preventDefault();
+  $('gateStatus').textContent = '';
+  const password = $('password').value;
+  const registrationFormat = /^(?=(?:[0-9]*[A-Za-z]){4}[0-9]*$)[A-Za-z0-9]{8}$/;
+  if (lastSaved === null && !registrationFormat.test(password)) {
+    $('gateStatus').textContent = '半角英字4文字と半角数字4桁を入力してください。';
+    return;
+  }
+  if (lastSaved === null && password !== $('repeat').value) {
+    $('gateStatus').textContent = 'パスワードが一致しません。';
+    return;
+  }
+  $('enter').disabled = true;
+  try {
+    const record = lastSaved === null ? null : JSON.parse(lastSaved);
+    salt = record ? record.salt : encode(crypto.getRandomValues(new Uint8Array(16)));
+    key = await derive(password, salt);
+    if (record) {
+      const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:decode(record.iv)}, key, decode(record.data));
+      pages = JSON.parse(new TextDecoder().decode(plain));
+    } else {
+      pages = Array.from({length:count}, blankPage);
+      await save();
+    }
+    $('password').value = $('repeat').value = '';
+    $('gate').hidden = true;
+    $('book').hidden = false;
+    showPage(0);
+  } catch {
+    key = pages = null;
+    $('gateStatus').textContent = lastSaved === null ? '手帳を保存できませんでした。' : '手帳を開けませんでした。パスワードをご確認ください。';
+  } finally {
+    $('enter').disabled = false;
+  }
+};
+$('lock').onclick = async () => {
+  $('lock').disabled = true;
+  $('book').inert = true;
+  session++;
+  requests.clear();
+  try {
+    await pending;
+  } catch {
+    $('lock').disabled = false;
+    $('book').inert = false;
+    return;
+  }
+  attempted.clear();
+  undo = key = pages = null;
+  if (map) map.remove();
+  map = marksLayer = null;
+  $('memo').value = $('date').value = $('time').value = '';
+  $('lock').disabled = false;
+  showGate();
+  $('book').inert = false;
+};
+
+function startMap() {
+  if (map) return true;
+  if (!globalThis.L) {
+    $('mapStatus').textContent = '地図を読み込めませんでした。通信を確認して再読み込みしてください。';
+    return false;
+  }
+  map = L.map('map', {zoomControl:true, maxZoom:19});
+  const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  tiles.on('tileerror', () => {
+    if (!$('mapStatus').textContent) $('mapStatus').textContent = '地図画像を読み込めませんでした。通信をご確認ください。';
+  });
+  marksLayer = L.layerGroup().addTo(map);
+  map.on('moveend', () => {
+    if (applyingView || !pages) return;
+    const center = map.getCenter();
+    pages[index].view = [center.lat, center.lng, map.getZoom()];
+    requests.delete(index);
+    $('mapStatus').textContent = '';
+    save();
+  });
+  map.on('click', event => {
+    if (!marking) return;
+    const point = event.latlng.wrap();
+    const center = map.getCenter();
+    pages[index].view ||= [center.lat, center.lng, map.getZoom()];
+    requests.delete(index);
+    pages[index].marks.push({lat:point.lat, lng:point.lng, color:$('color').value});
+    setMarking(false);
+    drawMarks();
+    save();
+  });
+  return true;
+}
+function setView(view) {
+  applyingView = true;
+  try {
+    map.stop();
+    map.closePopup();
+    map.invalidateSize({pan:false, debounceMoveend:false});
+    map.setView(view.slice(0,2), view[2], {animate:false});
+  } finally {
+    applyingView = false;
+  }
+}
+function drawMarks() {
+  if (!marksLayer) return;
+  marksLayer.clearLayers();
+  const current = pages[index];
+  for (const mark of current.marks) {
+    const marker = L.circleMarker([mark.lat, mark.lng], {
+      color:mark.color, radius:12, weight:4, fill:false, bubblingMouseEvents:false
+    }).addTo(marksLayer);
+    const remove = document.createElement('button');
+    remove.textContent = 'この印を消す';
+    remove.onclick = () => {
+      current.marks = current.marks.filter(item => item !== mark);
+      drawMarks();
+      save();
+    };
+    marker.bindPopup(remove);
+  }
+}
+function setMarking(on) {
+  marking = on;
+  $('mark').setAttribute('aria-pressed', String(on));
+  $('mark').textContent = on ? '丸印を付けるのをやめる' : '丸印を付ける';
+  $('mapStatus').textContent = on ? '地図をタップして丸印を付けます。' : '';
+}
+function locate() {
+  if (!map) return;
+  if (!navigator.geolocation) {
+    $('mapStatus').textContent = 'この環境では現在地を取得できません。';
+    return;
+  }
+  const target = index;
+  const token = Symbol();
+  const activeSession = session;
+  attempted.add(target);
+  requests.set(target, token);
+  $('mapStatus').textContent = '現在地を取得中…';
+  const isCurrent = () => session === activeSession && requests.get(target) === token;
+  navigator.geolocation.getCurrentPosition(({coords}) => {
+    if (!isCurrent()) return;
+    requests.delete(target);
+    const view = [coords.latitude, coords.longitude, 16];
+    pages[target].view = view;
+    if (index === target) {
+      setView(view);
+      $('mapStatus').textContent = '';
+    }
+    save();
+  }, () => {
+    if (!isCurrent()) return;
+    requests.delete(target);
+    if (index === target) $('mapStatus').textContent = '現在地を取得できませんでした。位置情報の許可を確認するか、地図を手で移動してください。';
+  }, {timeout:12000, maximumAge:0});
+}
+function refreshClear() {
+  $('clear').disabled = !pages[index].memo && !pages[index].marks.length;
+  $('undo').hidden = undo?.index !== index;
+}
+function showPage(target) {
+  if (target < 0 || target >= count) return;
+  if (map) {
+    applyingView = true;
+    map.stop();
+    applyingView = false;
+  }
+  index = target;
+  const current = pages[index];
+  $('page').value = index;
+  $('prev').disabled = index === 0;
+  $('next').disabled = index === count - 1;
+  for (const field of ['date','time','memo']) $(field).value = current[field];
+  $('memo').scrollTop = 0;
+  refreshClear();
+  setMarking(false);
+  if (!startMap()) return;
+  setView(current.view || [38.2682,140.8694,13]);
+  drawMarks();
+  if (requests.has(index)) $('mapStatus').textContent = '現在地を取得中…';
+  else if (!current.view && !attempted.has(index)) locate();
+}
+for (let n = 0; n < count; n++) $('page').add(new Option(`${n+1} / ${count} ページ`, n));
+$('page').onchange = () => showPage(Number($('page').value));
+$('prev').onclick = () => showPage(index - 1);
+$('next').onclick = () => showPage(index + 1);
+for (const surface of [$('nav'), $('titleBar')]) {
+  surface.onpointerdown = event => {
+    if (event.target.closest('button, select')) return;
+    gesture = {x:event.clientX, y:event.clientY, id:event.pointerId};
+    surface.setPointerCapture(event.pointerId);
+  };
+  surface.onpointerup = event => {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    gesture = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) showPage(index + (dx < 0 ? 1 : -1));
+  };
+  surface.onpointercancel = () => { gesture = null; };
+}
+$('locate').onclick = locate;
+$('mark').onclick = () => { if (map) setMarking(!marking); };
+for (const field of ['date','time','memo']) {
+  $(field).oninput = () => {
+    pages[index][field] = $(field).value;
+    if (field === 'memo' && undo?.index === index) undo = null;
+    refreshClear();
+    save();
+  };
+}
+$('now').onclick = () => {
+  const now = new Date();
+  const two = value => String(value).padStart(2,'0');
+  pages[index].date = $('date').value = `${now.getFullYear()}-${two(now.getMonth()+1)}-${two(now.getDate())}`;
+  pages[index].time = $('time').value = `${two(now.getHours())}:${two(now.getMinutes())}`;
+  save();
+};
+$('clear').onclick = () => {
+  $('clearText').textContent = `${index+1}ページ目のメモと地図の印をすべて消去しますか？`;
+  $('confirmClear').returnValue = 'cancel';
+  $('confirmClear').showModal();
+};
+$('confirmClear').onclose = () => {
+  if ($('confirmClear').returnValue !== 'clear') return;
+  const current = pages[index];
+  undo = {index, memo:current.memo, marks:current.marks};
+  current.memo = $('memo').value = '';
+  current.marks = [];
+  drawMarks();
+  refreshClear();
+  save();
+};
+$('undo').onclick = () => {
+  if (undo?.index !== index) return;
+  pages[index].memo = $('memo').value = undo.memo;
+  pages[index].marks = [...undo.marks, ...pages[index].marks];
+  undo = null;
+  drawMarks();
+  refreshClear();
+  save();
+};
+addEventListener('DOMContentLoaded', showGate);
+</script>
+</html>
