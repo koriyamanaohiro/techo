@@ -29,6 +29,19 @@ textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid 
 #book .tools button,.mapbar button,.mapbar select{min-height:34px;padding:2px 6px;font-size:16px}
 .mapbar{justify-content:space-between}.mapbar label{font-size:15px;white-space:nowrap}
 #map{flex:1 0 220px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
+ .row{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1.05fr) auto auto}
+.row input,.row button{width:100%;height:36px;min-height:36px}
+.row input{min-width:0;font-size:16px}
+#timerStart{background:#236448;color:white}
+#timerEnd{background:#a43d30;color:white}
+#timerReadout{font-size:15px;font-variant-numeric:tabular-nums;text-align:right}
+#records{width:min(560px,calc(100% - 20px));max-height:90dvh}
+.recordHead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#recordDays{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px}
+#recordDays button{padding:4px;touch-action:pan-y;user-select:none;font-variant-numeric:tabular-nums}
+#recordDays span{display:block;font-size:.8rem}
+#recordEdit label{display:block;margin-bottom:6px}
+#recordEdit input{width:100%;margin-top:4px}
 .status{font-size:.82rem;margin:4px 0;color:#425a50}.status:empty{display:none}
 #gate{max-width:410px;margin: min(15vh,130px) auto 0;padding:23px;border:1px solid #bfc8bc;border-radius:17px;background:#fffdf7}
 #gate label,#gate input{display:block;width:100%;margin:8px 0}#gate button{margin-top:6px}
@@ -48,8 +61,9 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 </section>
 <section id="book" hidden>
 <div class="upper">
-<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ</button><button id="lock">ロック</button></nav>
-<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="now">今の日時</button></div>
+<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ</button><button id="recordsLink" aria-label="時間の記録">記</button><button id="lock">ロック</button></nav>
+<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="timerStart">始め</button><button id="timerEnd" disabled>終了</button></div>
+<output id="timerReadout" aria-label="経過時間">00:00:00</output>
 <textarea id="memo" aria-label="メモ" placeholder="ここにメモを書く"></textarea>
 <div class="tools"><button id="undo" hidden>元に戻す</button><button class="danger" id="clear">メモと地図の印を消去</button></div>
 <p class="status" id="saveStatus" role="status"></p>
@@ -63,6 +77,20 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 <p class="status" id="mapStatus" role="status"></p>
 </section>
 <dialog id="confirmClear"><form method="dialog"><p id="clearText"></p><div class="tools"><button value="cancel" autofocus>キャンセル</button><button class="danger" value="clear">消去する</button></div></form></dialog>
+<dialog id="records">
+<div class="recordHead"><strong>時間の記録</strong><button id="recordsClose">手帳に戻る</button></div>
+<label>表示月 <input id="recordMonth" type="month"></label>
+<p id="recordTotal"></p>
+<p class="status">日別の時間は長押しで修正できます。</p>
+<div id="recordDays"></div>
+</dialog>
+<dialog id="recordEdit">
+<form id="editForm">
+<p id="editDate"></p>
+<label>時間（時:分:秒） <input id="editDuration" required placeholder="1:30:00" pattern="[0-9]{1,4}:[0-5][0-9]:[0-5][0-9]"></label>
+<div class="tools"><button type="button" id="editCancel">キャンセル</button><button class="primary">保存</button></div>
+</form>
+</dialog>
 </main>
 <script>
 'use strict';
@@ -76,6 +104,7 @@ const textEncoder = new TextEncoder();
 let key, salt, pages, index = 0, lastSaved, pending = Promise.resolve();
 let map, marksLayer, applyingView = false, marking = false, undo, gesture;
 let requests = new Map();
+let daily = {}, watch = null;
 let attempted = new Set();
 let session = 0;
 
@@ -85,7 +114,7 @@ async function derive(password, salt) {
     material, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
 }
 function save() {
-  const snapshot = textEncoder.encode(JSON.stringify(pages));
+  const snapshot = textEncoder.encode(JSON.stringify({pages, daily, watch}));
   const saveKey = key;
   const saveSalt = salt;
   $('saveStatus').textContent = '保存中…';
@@ -143,8 +172,13 @@ $('access').onsubmit = async event => {
     key = await derive(password, salt);
     if (record) {
       const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:decode(record.iv)}, key, decode(record.data));
-      pages = JSON.parse(new TextDecoder().decode(plain));
+      const saved = JSON.parse(new TextDecoder().decode(plain));
+      pages = Array.isArray(saved) ? saved : saved.pages;
+      daily = saved.daily || {};
+      watch = saved.watch || null;
     } else {
+      daily = {};
+      watch = null;
       pages = Array.from({length:count}, blankPage);
       await save();
     }
@@ -152,6 +186,7 @@ $('access').onsubmit = async event => {
     $('gate').hidden = true;
     $('book').hidden = false;
     showPage(0);
+    renderWatch();
   } catch {
     key = pages = null;
     $('gateStatus').textContent = lastSaved === null ? '手帳を保存できませんでした。' : '手帳を開けませんでした。パスワードをご確認ください。';
@@ -172,7 +207,8 @@ $('lock').onclick = async () => {
     return;
   }
   attempted.clear();
-  undo = key = pages = null;
+  undo = key = pages = watch = null;
+  daily = {};
   if (map) map.remove();
   map = marksLayer = null;
   $('memo').value = $('date').value = $('time').value = '';
@@ -212,6 +248,7 @@ function startMap() {
     pages[index].marks.push({lat:point.lat, lng:point.lng, color:$('color').value});
     setMarking(false);
     drawMarks();
+    refreshClear();
     save();
   });
   return true;
@@ -240,6 +277,7 @@ function drawMarks() {
     remove.onclick = () => {
       current.marks = current.marks.filter(item => item !== mark);
       drawMarks();
+      refreshClear();
       save();
     };
     marker.bindPopup(remove);
@@ -335,11 +373,108 @@ for (const field of ['date','time','memo']) {
     save();
   };
 }
-$('now').onclick = () => {
-  const now = new Date();
-  const two = value => String(value).padStart(2,'0');
-  pages[index].date = $('date').value = `${now.getFullYear()}-${two(now.getMonth()+1)}-${two(now.getDate())}`;
-  pages[index].time = $('time').value = `${two(now.getHours())}:${two(now.getMinutes())}`;
+const two = value => String(value).padStart(2, '0');
+function dateKey(date) {
+  return `${date.getFullYear()}-${two(date.getMonth()+1)}-${two(date.getDate())}`;
+}
+function duration(seconds) {
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(two).join(':');
+}
+for (const field of ['date','time']) {
+  $(field).addEventListener('click', () => {
+    if ($(field).value) return;
+    const now = new Date();
+    pages[index][field] = $(field).value = field === 'date' ? dateKey(now) : `${two(now.getHours())}:${two(now.getMinutes())}`;
+    save();
+  });
+}
+function elapsed(now = Date.now()) {
+  return watch ? watch.milliseconds + (watch.started === null ? 0 : Math.max(0, now - watch.started)) : 0;
+}
+function renderWatch() {
+  $('timerReadout').textContent = duration(Math.floor(elapsed() / 1000));
+  $('timerStart').textContent = !watch ? '始め' : watch.started === null ? '再開' : '停止';
+  $('timerEnd').disabled = !watch;
+}
+setInterval(() => { if (watch?.started != null && pages) renderWatch(); }, 200);
+$('timerStart').onclick = () => {
+  const now = Date.now();
+  if (!watch) watch = {date:dateKey(new Date(now)), milliseconds:0, started:now};
+  else if (watch.started === null) watch.started = now;
+  else {
+    watch.milliseconds = elapsed(now);
+    watch.started = null;
+  }
+  renderWatch();
+  save();
+};
+$('timerEnd').onclick = () => {
+  if (!watch) return;
+  const day = watch.date;
+  daily[day] = (daily[day] || 0) + Math.floor(elapsed() / 1000);
+  watch = null;
+  renderWatch();
+  save();
+};
+
+let editingDay;
+function editDay(day) {
+  editingDay = day;
+  $('editDate').textContent = `${day} の記録を修正`;
+  $('editDuration').value = duration(daily[day] || 0);
+  $('recordEdit').showModal();
+}
+function bindDay(button, day) {
+  let press, origin;
+  const cancel = () => clearTimeout(press);
+  button.onpointerdown = event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    origin = [event.clientX, event.clientY];
+    press = setTimeout(() => editDay(day), 550);
+  };
+  button.onpointermove = event => {
+    if (origin && Math.hypot(event.clientX - origin[0], event.clientY - origin[1]) > 10) cancel();
+  };
+  button.onpointerup = button.onpointercancel = button.onpointerleave = cancel;
+  button.oncontextmenu = event => event.preventDefault();
+  button.onclick = event => { if (event.detail === 0 && !$('recordEdit').open) editDay(day); };
+}
+function renderRecords() {
+  const month = $('recordMonth').value;
+  if (!month) return;
+  const [year, number] = month.split('-').map(Number);
+  const last = new Date(year, number, 0).getDate();
+  const days = $('recordDays');
+  days.replaceChildren();
+  let total = 0;
+  for (let day = 1; day <= last; day++) {
+    const key = `${month}-${two(day)}`;
+    const seconds = daily[key] || 0;
+    total += seconds;
+    const button = document.createElement('button');
+    const label = document.createElement('span');
+    label.textContent = `${day}日`;
+    button.append(label, duration(seconds));
+    bindDay(button, key);
+    days.append(button);
+  }
+  $('recordTotal').textContent = `月の合計  ${duration(total)}`;
+}
+$('recordsLink').onclick = () => {
+  const selected = $('recordMonth');
+  selected.value = dateKey(new Date()).slice(0, 7);
+  renderRecords();
+  $('records').showModal();
+};
+$('recordsClose').onclick = () => $('records').close();
+$('recordMonth').oninput = renderRecords;
+$('editCancel').onclick = () => $('recordEdit').close();
+$('editForm').onsubmit = event => {
+  event.preventDefault();
+  const [hours, minutes, seconds] = $('editDuration').value.split(':').map(Number);
+  daily[editingDay] = hours * 3600 + minutes * 60 + seconds;
+  $('recordEdit').close();
+  renderRecords();
   save();
 };
 $('clear').onclick = () => {
