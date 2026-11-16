@@ -14,23 +14,30 @@ body{margin:0;padding:env(safe-area-inset-top) max(14px,env(safe-area-inset-righ
 main{max-width:960px;margin:auto} h1{font-family:Georgia,"Yu Mincho",serif;font-size:1.65rem;margin:0}
 button,input,textarea,select{font:inherit;color:inherit} button,input,select{min-height:44px;border:1px solid #aab5ac;border-radius:9px;background:#fffdf7;padding:6px 10px}
 button{cursor:pointer} button:disabled{opacity:.45} button[aria-pressed="true"],.primary{background:#2d554a;color:white}
-header,.nav,.row,.mapbar,.tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-header,.nav,.mapbar{justify-content:space-between} header{padding:9px 0}header,.nav{touch-action:pan-y}
-.upper{min-height:calc(50dvh - env(safe-area-inset-top));display:flex;flex-direction:column;gap:7px;padding-bottom:9px}
-.row label{font-size:.8rem}.row input{display:block;max-width:100%;font-size:16px}.row button{align-self:end;font-size:.82rem}
-textarea{width:100%;min-height:68px;flex:1;resize:none;border:1px solid #aab5ac;border-radius:10px;background:#fffdf7;padding:8px 12px;line-height:1.5;overflow-y:auto}
-.tools{justify-content:flex-end}.tools button,.mapbar button{font-size:.79rem}.danger{color:#923b34}
-#map{height:calc(50dvh - 64px - env(safe-area-inset-bottom));min-height:165px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
-.mapbar{margin-bottom:6px}.mapbar label{font-size:.8rem}.mapbar select{min-height:44px}
+#book{min-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:5px;padding:5px 0}
+.nav,.row,.mapbar,.tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.nav{justify-content:space-between;touch-action:pan-y;flex-wrap:nowrap}
+.nav button,.nav select{font-size:clamp(17px,5vw,21px);font-weight:600;min-height:34px;padding:2px 6px;white-space:nowrap}
+.nav select{min-width:0}
+.upper{display:flex;flex-direction:column;gap:5px}
+.row{align-items:end}
+.row label{font-size:15px;font-weight:600;min-width:0}
+.row input{display:block;min-height:35px;padding:2px 4px;font-size:18px;max-width:100%}
+.row button{min-height:35px;padding:2px 6px;font-size:17px;font-weight:600;white-space:nowrap}
+textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid #aab5ac;border-radius:10px;background:#fffdf7;padding:6px 9px;font-size:18px;line-height:1.4;overflow-y:auto}
+.tools{justify-content:flex-end}.danger{color:#923b34}
+#book .tools button,.mapbar button,.mapbar select{min-height:34px;padding:2px 6px;font-size:16px}
+.mapbar{justify-content:space-between}.mapbar label{font-size:15px;white-space:nowrap}
+#map{flex:1 0 220px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
 .status{font-size:.82rem;margin:4px 0;color:#425a50}.status:empty{display:none}
 #gate{max-width:410px;margin: min(15vh,130px) auto 0;padding:23px;border:1px solid #bfc8bc;border-radius:17px;background:#fffdf7}
 #gate label,#gate input{display:block;width:100%;margin:8px 0}#gate button{margin-top:6px}
 dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);color:inherit;background:#fffdf7}dialog::backdrop{background:#172c25aa}
-@media(min-width:700px){body{padding-inline:24px}.upper{gap:10px}textarea{min-height:135px}}
+@media(min-width:700px){body{padding-inline:24px}.upper{gap:8px}textarea{height:clamp(120px,18dvh,220px)}}
 </style>
 <main>
 <section id="gate">
-<h1>場所の手帳</h1>
+<h1>パスワード</h1>
 <p id="intro"></p>
 <form id="access">
 <label>パスワード<input id="password" type="password" required></label>
@@ -41,9 +48,8 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 </section>
 <section id="book" hidden>
 <div class="upper">
-<header id="titleBar"><h1>場所の手帳</h1><button id="lock">ロック</button></header>
-<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">‹ 前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ ›</button></nav>
-<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="now">今の日時を入れる</button></div>
+<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ</button><button id="lock">ロック</button></nav>
+<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="now">今の日時</button></div>
 <textarea id="memo" aria-label="メモ" placeholder="ここにメモを書く"></textarea>
 <div class="tools"><button id="undo" hidden>元に戻す</button><button class="danger" id="clear">メモと地図の印を消去</button></div>
 <p class="status" id="saveStatus" role="status"></p>
@@ -242,7 +248,7 @@ function drawMarks() {
 function setMarking(on) {
   marking = on;
   $('mark').setAttribute('aria-pressed', String(on));
-  $('mark').textContent = on ? '丸印を付けるのをやめる' : '丸印を付ける';
+  $('mark').textContent = on ? '丸印を終了' : '丸印を付ける';
   $('mapStatus').textContent = on ? '地図をタップして丸印を付けます。' : '';
 }
 function locate() {
@@ -300,15 +306,15 @@ function showPage(target) {
   if (requests.has(index)) $('mapStatus').textContent = '現在地を取得中…';
   else if (!current.view && !attempted.has(index)) locate();
 }
-for (let n = 0; n < count; n++) $('page').add(new Option(`${n+1} / ${count} ページ`, n));
+for (let n = 0; n < count; n++) $('page').add(new Option(`${n+1} / ${count}`, n));
 $('page').onchange = () => showPage(Number($('page').value));
 $('prev').onclick = () => showPage(index - 1);
 $('next').onclick = () => showPage(index + 1);
-for (const surface of [$('nav'), $('titleBar')]) {
+for (const surface of [$('nav')]) {
   surface.onpointerdown = event => {
-    if (event.target.closest('button, select')) return;
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.target.closest('button, select'))) return;
     gesture = {x:event.clientX, y:event.clientY, id:event.pointerId};
-    surface.setPointerCapture(event.pointerId);
+    if (!event.target.closest('button, select')) surface.setPointerCapture(event.pointerId);
   };
   surface.onpointerup = event => {
     if (!gesture || gesture.id !== event.pointerId) return;
