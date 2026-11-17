@@ -23,11 +23,14 @@ button{cursor:pointer} button:disabled{opacity:.45} button[aria-pressed="true"],
 textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid #aab5ac;border-radius:10px;background:#fffdf7;padding:6px 9px;font-size:18px;line-height:1.4;overflow-y:auto}
 .tools{justify-content:flex-end}.danger{color:#923b34}
 #book .tools button,.mapbar button,.mapbar select{min-height:34px;padding:2px 6px;font-size:16px}
-.mapbar{justify-content:space-between}.mapbar label{font-size:15px;white-space:nowrap}
+.mapbar{justify-content:flex-start;flex-wrap:nowrap;gap:4px;overflow-x:auto}
+.mapbar button,.mapbar select{flex:none;padding-inline:5px;white-space:nowrap}
+.mapbar .danger{margin-inline-start:auto}
 #map{flex:1 0 220px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
  .row{display:grid;grid-template-columns:min(34%,7.25rem) min(20%,4.25rem) repeat(2,minmax(0,1fr));gap:0 5px;align-items:center}
 .row label{font-size:15px;font-weight:600;min-width:0;line-height:1.1}
 .row input{display:block;width:100%;min-width:0;height:29px;min-height:29px;padding:0 4px;font-size:16px;text-align:center}
+#time{width:calc(100% - 8px)}
 .row input::-webkit-date-and-time-value{margin:0;text-align:center}
 .row button{grid-row:1 / 3;width:100%;height:36px;min-height:36px;padding:0 2px;font-size:17px;font-weight:600;white-space:nowrap}
 #timerStart{grid-column:3;background:#236448;color:white}
@@ -44,10 +47,8 @@ textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid 
 #gate{max-width:410px;margin: min(15vh,130px) auto 0;padding:23px;border:1px solid #bfc8bc;border-radius:17px;background:#fffdf7}
 #gate label,#gate input{display:block;width:100%;margin:8px 0}#gate button{margin-top:6px}
 dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);color:inherit;background:#fffdf7}dialog::backdrop{background:#172c25aa}
-@media(min-width:700px){body{padding-inline:24px}.upper{gap:8px}textarea{height:clamp(120px,18dvh,220px)}}
+@media(min-width:700px){body{padding-inline:24px}.upper{gap:8px}textarea{height:80px}}
 #drawSurface{position:absolute;inset:0;z-index:1100;touch-action:none;user-select:none;-webkit-touch-callout:none;cursor:crosshair}
-.drawTools{display:flex;gap:5px;margin-left:auto}
-.drawTools button{min-height:34px;padding:2px 6px;font-size:16px}
 </style>
 <main>
 <section id="gate">
@@ -62,19 +63,21 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 </section>
 <section id="book" hidden>
 <div class="upper">
-<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ</button><button id="recordsLink" aria-label="時間の記録">記</button><button id="lock">ロック</button></nav>
+<nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">◁</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">▷</button><button id="recordsLink" aria-label="時間の記録">時間</button><button id="lock">ロック</button></nav>
 <div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="timerStart">始め</button><button id="timerEnd" disabled>終了</button>
 <output id="timerReadout" aria-label="経過時間">00:00:00</output></div>
 <textarea id="memo" aria-label="メモ" placeholder="ここにメモを書く"></textarea>
-<div class="tools"><button id="undo" hidden>元に戻す</button><button class="danger" id="clear">メモと地図の印を消去</button></div>
 <p class="status" id="saveStatus" role="status"></p>
 </div>
-<div class="mapbar">
-<button id="locate">現在地に戻す</button>
-<button id="mark" aria-pressed="false">丸印を付ける</button>
-<label>色 <select id="color" aria-label="丸印の色"><option value="#bf302f">赤</option><option value="#205cb5">青</option><option value="#267844">緑</option></select></label>
+<div class="mapbar" role="group" aria-label="地図とメモの操作">
+<button id="locate">現在地</button>
+<button id="mark" aria-pressed="false">丸印</button>
+<select id="color" aria-label="丸印の色"><option value="#bf302f">赤</option><option value="#205cb5">青</option><option value="#267844">緑</option></select>
+<button id="draw" aria-pressed="false">線</button>
+<button id="undoStroke" aria-label="手書き線を一筆戻す" disabled>戻す</button>
+<button id="undo" aria-label="一括消去を取り消す" hidden>取消</button>
+<button class="danger" id="clear" aria-label="メモと地図の印を消去">消去</button>
 </div>
-<div class="drawTools"><button id="draw" aria-pressed="false">線を描く</button><button id="undoStroke" disabled>一筆戻す</button></div>
 <div id="map" aria-label="OpenStreetMap"><div id="drawSurface" hidden></div></div>
 <p class="status" id="mapStatus" role="status"></p>
 </section>
@@ -299,7 +302,6 @@ function drawMarks() {
 function setMarking(on) {
   marking = on;
   $('mark').setAttribute('aria-pressed', String(on));
-  $('mark').textContent = on ? '丸印を終了' : '丸印を付ける';
   $('mapStatus').textContent = on ? '地図をタップして丸印を付けます。' : '';
 }
 function locate() {
@@ -423,8 +425,7 @@ function setDrawing(on) {
   }
   surface.hidden = !on;
   $('draw').setAttribute('aria-pressed', String(on));
-  $('draw').textContent = on ? '地図を動かす' : '線を描く';
-  $('mapStatus').textContent = on ? '地図を指でなぞって線を描きます。' : '';
+  $('mapStatus').textContent = on ? '指で描く。もう一度「線」を押すと地図を動かせます。' : '';
 }
 $('draw').onclick = () => { if (map) setDrawing($('drawSurface').hidden); };
 $('undoStroke').onclick = () => {
