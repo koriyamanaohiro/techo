@@ -45,6 +45,9 @@ textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid 
 #gate label,#gate input{display:block;width:100%;margin:8px 0}#gate button{margin-top:6px}
 dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);color:inherit;background:#fffdf7}dialog::backdrop{background:#172c25aa}
 @media(min-width:700px){body{padding-inline:24px}.upper{gap:8px}textarea{height:clamp(120px,18dvh,220px)}}
+#drawSurface{position:absolute;inset:0;z-index:1100;touch-action:none;user-select:none;-webkit-touch-callout:none;cursor:crosshair}
+.drawTools{display:flex;gap:5px;margin-left:auto}
+.drawTools button{min-height:34px;padding:2px 6px;font-size:16px}
 </style>
 <main>
 <section id="gate">
@@ -71,7 +74,8 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 <button id="mark" aria-pressed="false">丸印を付ける</button>
 <label>色 <select id="color" aria-label="丸印の色"><option value="#bf302f">赤</option><option value="#205cb5">青</option><option value="#267844">緑</option></select></label>
 </div>
-<div id="map" aria-label="OpenStreetMap"></div>
+<div class="drawTools"><button id="draw" aria-pressed="false">線を描く</button><button id="undoStroke" disabled>一筆戻す</button></div>
+<div id="map" aria-label="OpenStreetMap"><div id="drawSurface" hidden></div></div>
 <p class="status" id="mapStatus" role="status"></p>
 </section>
 <dialog id="confirmClear"><form method="dialog"><p id="clearText"></p><div class="tools"><button value="cancel" autofocus>キャンセル</button><button class="danger" value="clear">消去する</button></div></form></dialog>
@@ -95,13 +99,15 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 const $ = id => document.getElementById(id);
 const storageId = 'basho-techo-v1';
 const count = 20;
-const blankPage = () => ({date:'', time:'', memo:'', view:null, marks:[]});
+const blankPage = () => ({date:'', time:'', memo:'', view:null, marks:[], strokes:[]});
 const encode = bytes => btoa(Array.from(new Uint8Array(bytes), byte => String.fromCharCode(byte)).join(''));
 const decode = value => Uint8Array.from(atob(value), c => c.charCodeAt(0));
 const textEncoder = new TextEncoder();
 let key, salt, pages, index = 0, lastSaved, pending = Promise.resolve();
-let map, marksLayer, applyingView = false, marking = false, undo, gesture;
+let map, marksLayer, strokesLayer, applyingView = false, marking = false, undo, gesture;
 let requests = new Map();
+const strokeStyle = {color:"#b89269", weight:4, opacity:0.9, interactive:false};
+let stroke = null;
 let daily = {}, watch = null;
 let attempted = new Set();
 let session = 0;
@@ -204,11 +210,12 @@ $('lock').onclick = async () => {
     $('book').inert = false;
     return;
   }
+  setDrawing(false);
   attempted.clear();
   undo = key = pages = watch = null;
   daily = {};
   if (map) map.remove();
-  map = marksLayer = null;
+  map = marksLayer = strokesLayer = null;
   $('memo').value = $('date').value = $('time').value = '';
   $('lock').disabled = false;
   showGate();
@@ -228,6 +235,7 @@ function startMap() {
   tiles.on('tileerror', () => {
     if (!$('mapStatus').textContent) $('mapStatus').textContent = '地図画像を読み込めませんでした。通信をご確認ください。';
   });
+  strokesLayer = L.layerGroup().addTo(map);
   marksLayer = L.layerGroup().addTo(map);
   map.on('zoomend', () => marksLayer.eachLayer(updateMarkSize));
   map.on('moveend', () => {
@@ -296,6 +304,7 @@ function setMarking(on) {
 }
 function locate() {
   if (!map) return;
+  setDrawing(false);
   if (!navigator.geolocation) {
     $('mapStatus').textContent = 'この環境では現在地を取得できません。';
     return;
@@ -324,11 +333,14 @@ function locate() {
   }, {timeout:12000, maximumAge:0});
 }
 function refreshClear() {
-  $('clear').disabled = !pages[index].memo && !pages[index].marks.length;
+  const current = pages[index];
+  $('clear').disabled = !current.memo && !current.marks.length && !current.strokes?.length;
+  $('undoStroke').disabled = !current.strokes?.length;
   $('undo').hidden = undo?.index !== index;
 }
 function showPage(target) {
   if (target < 0 || target >= count) return;
+  setDrawing(false);
   if (map) {
     applyingView = true;
     map.stop();
@@ -346,6 +358,7 @@ function showPage(target) {
   if (!startMap()) return;
   setView(current.view || [38.2682,140.8694,13]);
   drawMarks();
+  drawStrokes();
   if (requests.has(index)) $('mapStatus').textContent = '現在地を取得中…';
   else if (!current.view && !attempted.has(index)) locate();
 }
@@ -369,7 +382,91 @@ for (const surface of [$('nav')]) {
   surface.onpointercancel = () => { gesture = null; };
 }
 $('locate').onclick = locate;
-$('mark').onclick = () => { if (map) setMarking(!marking); };
+$('mark').onclick = () => {
+  if (!map) return;
+  setDrawing(false);
+  setMarking(!marking);
+};
+
+function drawStrokes() {
+  if (!strokesLayer) return;
+  strokesLayer.clearLayers();
+  for (const points of pages[index].strokes || []) L.polyline(points, strokeStyle).addTo(strokesLayer);
+}
+function finishStroke(commit) {
+  if (!stroke) return;
+  const {points, line, pointer} = stroke;
+  stroke = null;
+  const surface = $('drawSurface');
+  if (surface.hasPointerCapture(pointer)) surface.releasePointerCapture(pointer);
+  if (!commit || points.length < 2) {
+    line.remove();
+    return;
+  }
+  const current = pages[index];
+  (current.strokes ||= []).push(points);
+  const center = map.getCenter();
+  current.view ||= [center.lat, center.lng, map.getZoom()];
+  refreshClear();
+  save();
+}
+function setDrawing(on) {
+  const surface = $('drawSurface');
+  if (!on && surface.hidden) return;
+  if (on) {
+    setMarking(false);
+    requests.delete(index);
+    map.stop();
+    map.closePopup();
+  } else {
+    finishStroke(false);
+  }
+  surface.hidden = !on;
+  $('draw').setAttribute('aria-pressed', String(on));
+  $('draw').textContent = on ? '地図を動かす' : '線を描く';
+  $('mapStatus').textContent = on ? '地図を指でなぞって線を描きます。' : '';
+}
+$('draw').onclick = () => { if (map) setDrawing($('drawSurface').hidden); };
+$('undoStroke').onclick = () => {
+  finishStroke(false);
+  pages[index].strokes.pop();
+  drawStrokes();
+  refreshClear();
+  save();
+};
+const surface = $('drawSurface');
+surface.onpointerdown = event => {
+  if (!map || stroke || !event.isPrimary || event.button !== 0) return;
+  event.stopPropagation();
+  surface.setPointerCapture(event.pointerId);
+  stroke = {pointer:event.pointerId, points:[], line:L.polyline([], strokeStyle).addTo(strokesLayer)};
+  addStrokePoint(event);
+};
+function addStrokePoint(event, minimumDistance = 0) {
+  const point = map.mouseEventToContainerPoint(event);
+  if (stroke.last && (stroke.last.equals(point) || stroke.last.distanceTo(point) < minimumDistance)) return;
+  const {lat, lng} = map.containerPointToLatLng(point);
+  stroke.points.push([Number(lat.toFixed(7)), Number(lng.toFixed(7))]);
+  stroke.last = point;
+  stroke.line.addLatLng([lat, lng]);
+}
+surface.onpointermove = event => {
+  if (stroke?.pointer === event.pointerId) addStrokePoint(event, 2);
+};
+surface.onpointerup = event => {
+  if (stroke?.pointer !== event.pointerId) return;
+  addStrokePoint(event);
+  finishStroke(true);
+};
+surface.onpointercancel = surface.onlostpointercapture = event => {
+  if (stroke?.pointer === event.pointerId) finishStroke(false);
+};
+for (const type of ['touchstart','mousedown','click','dblclick','wheel','contextmenu']) {
+  surface.addEventListener(type, event => {
+    event.stopPropagation();
+    if (type === 'contextmenu' || type === 'wheel') event.preventDefault();
+  }, {passive:false});
+}
 for (const field of ['date','time','memo']) {
   $(field).oninput = () => {
     pages[index][field] = $(field).value;
@@ -414,7 +511,7 @@ $('timerStart').onclick = () => {
   save();
 };
 $('timerEnd').onclick = () => {
-  if (!watch) return;
+  if (!watch || !window.confirm('本当に終了しますか？')) return;
   const day = watch.date;
   daily[day] = (daily[day] || 0) + Math.floor(elapsed() / 1000);
   watch = null;
@@ -483,17 +580,20 @@ $('editForm').onsubmit = event => {
   save();
 };
 $('clear').onclick = () => {
-  $('clearText').textContent = `${index+1}ページ目のメモと地図の印をすべて消去しますか？`;
+  $('clearText').textContent = `本当に消去しますか？ ${index+1}ページ目のメモ・丸印・手書き線が消えます。`;
   $('confirmClear').returnValue = 'cancel';
   $('confirmClear').showModal();
 };
 $('confirmClear').onclose = () => {
   if ($('confirmClear').returnValue !== 'clear') return;
   const current = pages[index];
-  undo = {index, memo:current.memo, marks:current.marks};
+  setDrawing(false);
+  undo = {index, memo:current.memo, marks:current.marks, strokes:current.strokes || []};
   current.memo = $('memo').value = '';
   current.marks = [];
+  current.strokes = [];
   drawMarks();
+  drawStrokes();
   refreshClear();
   save();
 };
@@ -501,6 +601,8 @@ $('undo').onclick = () => {
   if (undo?.index !== index) return;
   pages[index].memo = $('memo').value = undo.memo;
   pages[index].marks = [...undo.marks, ...pages[index].marks];
+  pages[index].strokes = [...undo.strokes, ...pages[index].strokes];
+  drawStrokes();
   undo = null;
   drawMarks();
   refreshClear();
