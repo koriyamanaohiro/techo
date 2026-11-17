@@ -20,21 +20,19 @@ button{cursor:pointer} button:disabled{opacity:.45} button[aria-pressed="true"],
 .nav button,.nav select{font-size:clamp(17px,5vw,21px);font-weight:600;min-height:34px;padding:2px 6px;white-space:nowrap}
 .nav select{min-width:0}
 .upper{display:flex;flex-direction:column;gap:5px}
-.row{align-items:end}
-.row label{font-size:15px;font-weight:600;min-width:0}
-.row input{display:block;min-height:35px;padding:2px 4px;font-size:18px;max-width:100%}
-.row button{min-height:35px;padding:2px 6px;font-size:17px;font-weight:600;white-space:nowrap}
 textarea{width:100%;height:clamp(76px,14dvh,160px);resize:none;border:1px solid #aab5ac;border-radius:10px;background:#fffdf7;padding:6px 9px;font-size:18px;line-height:1.4;overflow-y:auto}
 .tools{justify-content:flex-end}.danger{color:#923b34}
 #book .tools button,.mapbar button,.mapbar select{min-height:34px;padding:2px 6px;font-size:16px}
 .mapbar{justify-content:space-between}.mapbar label{font-size:15px;white-space:nowrap}
 #map{flex:1 0 220px;border:1px solid #b7c0b4;border-radius:12px;background:#e6eae0}
- .row{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1.05fr) auto auto}
-.row input,.row button{width:100%;height:36px;min-height:36px}
-.row input{min-width:0;font-size:16px}
-#timerStart{background:#236448;color:white}
-#timerEnd{background:#a43d30;color:white}
-#timerReadout{font-size:15px;font-variant-numeric:tabular-nums;text-align:right}
+ .row{display:grid;grid-template-columns:min(34%,7.25rem) min(20%,4.25rem) repeat(2,minmax(0,1fr));gap:0 5px;align-items:center}
+.row label{font-size:15px;font-weight:600;min-width:0;line-height:1.1}
+.row input{display:block;width:100%;min-width:0;height:29px;min-height:29px;padding:0 4px;font-size:16px;text-align:center}
+.row input::-webkit-date-and-time-value{margin:0;text-align:center}
+.row button{grid-row:1 / 3;width:100%;height:36px;min-height:36px;padding:0 2px;font-size:17px;font-weight:600;white-space:nowrap}
+#timerStart{grid-column:3;background:#236448;color:white}
+#timerEnd{grid-column:4;background:#a43d30;color:white}
+#timerReadout{grid-column:1 / 3;grid-row:2;font-size:15px;line-height:1.15;font-variant-numeric:tabular-nums;text-align:center}
 #records{width:min(560px,calc(100% - 20px));max-height:90dvh}
 .recordHead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 #recordDays{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px}
@@ -62,8 +60,8 @@ dialog{border:1px solid #bfc8bc;border-radius:15px;max-width:calc(100% - 30px);c
 <section id="book" hidden>
 <div class="upper">
 <nav id="nav" class="nav" aria-label="ページめくり"><button id="prev" aria-label="前のページ">前へ</button><select id="page" aria-label="ページ"></select><button id="next" aria-label="次のページ">次へ</button><button id="recordsLink" aria-label="時間の記録">記</button><button id="lock">ロック</button></nav>
-<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="timerStart">始め</button><button id="timerEnd" disabled>終了</button></div>
-<output id="timerReadout" aria-label="経過時間">00:00:00</output>
+<div class="row"><label>日付<input type="date" id="date"></label><label>時刻<input type="time" id="time"></label><button id="timerStart">始め</button><button id="timerEnd" disabled>終了</button>
+<output id="timerReadout" aria-label="経過時間">00:00:00</output></div>
 <textarea id="memo" aria-label="メモ" placeholder="ここにメモを書く"></textarea>
 <div class="tools"><button id="undo" hidden>元に戻す</button><button class="danger" id="clear">メモと地図の印を消去</button></div>
 <p class="status" id="saveStatus" role="status"></p>
