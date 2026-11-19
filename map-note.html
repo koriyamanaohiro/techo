@@ -166,7 +166,9 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.data
 svg.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&!e.isPrimary)return;e.preventDefault();svg.setPointerCapture(e.pointerId);pointer=e.pointerId;const p=point(e);if(mode==='erase'){erase(p)}else if(mode==='circle'){snapshot();items.push({type:'circle',color,points:[geo(p)]});draw();save()}else if(mode==='line'){snapshot();draft={type:'line',color,points:[geo(p)]};draw()}});svg.addEventListener('pointermove',e=>{if(pointer!==e.pointerId)return;const p=point(e);if(mode==='erase')erase(p);if(mode==='line'&&draft){const prev=screen(draft.points.at(-1));if(Math.hypot(prev[0]-p[0],prev[1]-p[1])>3){draft.points.push(geo(p));draw()}}});function finish(e){if(pointer!==e.pointerId)return;pointer=null;
 if(mode==='apartment' && e.type==='pointerup'){
   snapshot();
-  items.push({type:'apartment',number:pages[pageIndex].nextApartmentNumber++,points:[geo(point(e))],rooms:['','','']});
+  const page = pages[pageIndex];
+  if (!items.some(item => item.type === 'apartment')) page.nextApartmentNumber = 1;
+  items.push({type:'apartment',number:page.nextApartmentNumber++,points:[geo(point(e))],rooms:['','','']});
   setMode('move');
   draw();
   save();
