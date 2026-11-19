@@ -9,6 +9,7 @@
 #rooms[hidden]{display:none}
 #rooms header{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:13px;font-weight:700}
 #closeRooms{min-height:25px;padding:0 4px;font-size:14px}
+#roomTitle{touch-action:none;user-select:none;cursor:grab;flex:1;padding-block:4px}
 #rooms input{display:block;width:100%;min-height:34px;margin:3px 0;border:1px solid #a6b8ad;border-radius:4px;padding:3px 6px;font-size:16px}
 #addRoom{min-height:30px;margin-top:4px}
 </style></head><body><div id="app"><div id="toolbar"><div class="line"><div class="page-nav"><button id="prev" aria-label="前のページ">◁</button><select id="page" aria-label="ページ選択"></select><button id="next" aria-label="次のページ">▷</button></div><span class="label">日付</span><input type="date" id="date"><span class="label">時刻</span><input type="time" id="time"><button id="locate">現在地</button></div><div class="line"><button data-mode="move" class="active">移動</button><button data-mode="circle">丸印</button><button data-mode="line">線</button><button data-mode="erase">消しゴム</button><button class="color active" data-color="red" aria-label="丸印の色 赤"><span class="dot"></span></button><button class="color" data-color="blue" aria-label="丸印の色 青"><span class="dot"></span></button><button class="color" data-color="green" aria-label="丸印の色 緑"><span class="dot"></span></button><button id="apartmentTool" data-mode="apartment" aria-label="アパートの印を付ける">□</button></div><div class="line"><button id="memoToggle">メモ</button><button id="undo">戻す</button><button id="clear">消去</button><button id="share" class="share">LINE転送</button></div></div><div id="mapWrap"><div id="map"></div><svg id="draw" xmlns="http://www.w3.org/2000/svg"></svg><div id="apartmentPins"></div><section id="rooms" hidden aria-label="会えた部屋番号"><header><span id="roomTitle">会えた番号</span><button id="closeRooms" aria-label="部屋番号表を閉じる">×</button></header><div id="roomRows"></div><button id="addRoom" aria-label="行を追加">＋</button></section><div id="memoBox"><div id="memoHandle"><span>☰ メモを移動</span><span>↘で大きさ変更</span></div><textarea id="memoText" placeholder="ここにメモを書く"></textarea><div id="memoResize" aria-label="メモ欄の大きさ変更"></div></div><div id="hint">移動：1本指で移動・2本指で拡大縮小</div></div></div><div id="notice"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
@@ -64,10 +65,12 @@ function positionRooms() {
     return;
   }
   const [x,y] = screen(openApartment.points[0]);
-  roomSheet.style.left = Math.max(0, Math.min(x + 20, mapWrap.clientWidth - roomSheet.offsetWidth)) + 'px';
+
   const below = y + 22;
   const top = below + roomSheet.offsetHeight <= mapWrap.clientHeight ? below : y - 22 - roomSheet.offsetHeight;
-  roomSheet.style.top = Math.max(0, Math.min(top, mapWrap.clientHeight - roomSheet.offsetHeight)) + 'px';
+  const [left, sheetTop] = openApartment.sheetPosition || [x + 20, top];
+  roomSheet.style.left = Math.max(0, Math.min(left, mapWrap.clientWidth - roomSheet.offsetWidth)) + 'px';
+  roomSheet.style.top = Math.max(0, Math.min(sheetTop, mapWrap.clientHeight - roomSheet.offsetHeight)) + 'px';
 }
 function appendRoomRow(apartment, index) {
   const input = document.createElement('input');
@@ -94,6 +97,26 @@ function toggleRooms(apartment) {
   roomSheet.hidden = false;
   positionRooms();
 }
+const roomTitleHandle = $('roomTitle');
+let roomDrag;
+roomTitleHandle.onpointerdown = event => {
+  if (!event.isPrimary || event.button !== 0 || !openApartment) return;
+  roomDrag = {
+    id:event.pointerId, apartment:openApartment,
+    x:event.clientX-roomSheet.offsetLeft, y:event.clientY-roomSheet.offsetTop
+  };
+  roomTitleHandle.setPointerCapture(event.pointerId);
+};
+roomTitleHandle.onpointermove = event => {
+  if (roomDrag?.id !== event.pointerId || openApartment !== roomDrag.apartment) return;
+  openApartment.sheetPosition = [event.clientX-roomDrag.x,event.clientY-roomDrag.y];
+  positionRooms();
+};
+roomTitleHandle.onpointerup = roomTitleHandle.onpointercancel = roomTitleHandle.onlostpointercapture = event => {
+  if (roomDrag?.id !== event.pointerId) return;
+  roomDrag = null;
+  save();
+};
 $('closeRooms').onclick = closeRooms;
 $('addRoom').onclick = () => {
   const index = openApartment.rooms.push('') - 1;
@@ -121,7 +144,15 @@ function drawApartment(apartment) {
 const toast=s=>{const n=$('notice');n.textContent=s;n.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.style.display='none',2800)};const point=e=>{const r=svg.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]};const geo=p=>{const v=map.containerPointToLatLng(L.point(p[0],p[1]));return [v.lat,v.lng]};const screen=p=>{const v=map.latLngToContainerPoint(L.latLng(p[0],p[1]));return [v.x,v.y]};const snapshot=()=>history.push(JSON.stringify(items));function draw(){svg.replaceChildren();pins.replaceChildren();const ns='http://www.w3.org/2000/svg';for(const it of [...items,...(draft?[draft]:[])]){if(it.type==='apartment'){drawApartment(it)}else if(it.type==='circle'){const p=screen(it.points[0]),el=document.createElementNS(ns,'circle');el.setAttribute('cx',p[0]);el.setAttribute('cy',p[1]);el.setAttribute('r',13);el.setAttribute('fill','none');el.setAttribute('stroke',palette[it.color]||palette.red);el.setAttribute('stroke-width','4');svg.appendChild(el)}else if(it.points.length){const el=document.createElementNS(ns,'polyline');el.setAttribute('points',it.points.map(p=>screen(p).join(',')).join(' '));el.setAttribute('fill','none');el.setAttribute('stroke',lineColor);el.setAttribute('stroke-width','4');el.setAttribute('stroke-linecap','round');el.setAttribute('stroke-linejoin','round');svg.appendChild(el)}}positionRooms();$('undo').disabled=!history.length;$('clear').disabled=!items.length}
 function setMode(m){mode=m;const allowPins=m==='move'||m==='apartment';pins.classList.toggle('inactive',!allowPins);if(!allowPins)closeRooms();for(const pin of pins.children)pin.tabIndex=allowPins?0:-1;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));svg.style.pointerEvents=m==='move'?'none':'auto';map.dragging[m==='move'?'enable':'disable']();map.touchZoom[m==='move'?'enable':'disable']();map.doubleClickZoom[m==='move'?'enable':'disable']();$('hint').textContent={move:'移動：1本指で移動・2本指で拡大縮小',circle:'丸印：地図をタップ',apartment:'アパート：地図をタップして赤い□を置く',line:'線：指でなぞる',erase:'消しゴム：印や線をタップ／なぞる'}[m]}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));document.querySelectorAll('[data-color]').forEach(b=>b.onclick=()=>{color=b.dataset.color;document.querySelectorAll('[data-color]').forEach(x=>x.classList.toggle('active',x===b))});const dist=(p,a,b)=>{let dx=b[0]-a[0],dy=b[1]-a[1],t=dx*dx+dy*dy?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy))):0;return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)};function erase(p){for(let i=items.length-1;i>=0;i--){const it=items[i],pts=it.points.map(screen);let hit=it.type==='apartment'?Math.hypot(p[0]-pts[0][0],p[1]-pts[0][1])<=20:it.type==='circle'?Math.abs(Math.hypot(p[0]-pts[0][0],p[1]-pts[0][1])-13)<13:pts.some((q,j)=>j>0&&dist(p,pts[j-1],q)<13);if(hit){snapshot();items.splice(i,1);draw();save();return}}}
-svg.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&!e.isPrimary)return;e.preventDefault();svg.setPointerCapture(e.pointerId);pointer=e.pointerId;const p=point(e);if(mode==='erase'){erase(p)}else if(mode==='apartment'){snapshot();items.push({type:'apartment',number:pages[pageIndex].nextApartmentNumber++,points:[geo(p)],rooms:['','','']});draw();save()}else if(mode==='circle'){snapshot();items.push({type:'circle',color,points:[geo(p)]});draw();save()}else if(mode==='line'){snapshot();draft={type:'line',color,points:[geo(p)]};draw()}});svg.addEventListener('pointermove',e=>{if(pointer!==e.pointerId)return;const p=point(e);if(mode==='erase')erase(p);if(mode==='line'&&draft){const prev=screen(draft.points.at(-1));if(Math.hypot(prev[0]-p[0],prev[1]-p[1])>3){draft.points.push(geo(p));draw()}}});function finish(e){if(pointer!==e.pointerId)return;pointer=null;if(draft){if(draft.points.length===1)draft.points.push(draft.points[0]);items.push(draft);draft=null;draw();save()}}svg.addEventListener('pointerup',finish);svg.addEventListener('pointercancel',finish);map.on('move zoom resize',draw);map.on('moveend zoomend',save);$('undo').onclick=()=>{if(history.length){items=JSON.parse(history.pop());draw();save()}};$('clear').onclick=()=>{if(items.length&&confirm('すべての丸印・アパートの印（部屋番号を含む）・線を消去しますか？')){snapshot();items=[];draw();save()}};['date','time'].forEach(id=>$(id).addEventListener('change',save));$('locate').onclick=()=>{if(!navigator.geolocation){toast('位置情報に対応していません');return}navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],17),e=>toast('現在地を取得できません。Safariの位置情報設定をご確認ください'),{enableHighAccuracy:true,timeout:12000})};
+svg.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&!e.isPrimary)return;e.preventDefault();svg.setPointerCapture(e.pointerId);pointer=e.pointerId;const p=point(e);if(mode==='erase'){erase(p)}else if(mode==='circle'){snapshot();items.push({type:'circle',color,points:[geo(p)]});draw();save()}else if(mode==='line'){snapshot();draft={type:'line',color,points:[geo(p)]};draw()}});svg.addEventListener('pointermove',e=>{if(pointer!==e.pointerId)return;const p=point(e);if(mode==='erase')erase(p);if(mode==='line'&&draft){const prev=screen(draft.points.at(-1));if(Math.hypot(prev[0]-p[0],prev[1]-p[1])>3){draft.points.push(geo(p));draw()}}});function finish(e){if(pointer!==e.pointerId)return;pointer=null;
+if(mode==='apartment' && e.type==='pointerup'){
+  snapshot();
+  items.push({type:'apartment',number:pages[pageIndex].nextApartmentNumber++,points:[geo(point(e))],rooms:['','','']});
+  setMode('move');
+  draw();
+  save();
+}
+if(draft){if(draft.points.length===1)draft.points.push(draft.points[0]);items.push(draft);draft=null;draw();save()}}svg.addEventListener('pointerup',finish);svg.addEventListener('pointercancel',finish);map.on('move zoom resize',draw);map.on('moveend zoomend',save);$('undo').onclick=()=>{if(history.length){items=JSON.parse(history.pop());draw();save()}};$('clear').onclick=()=>{if(items.length&&confirm('すべての丸印・アパートの印（部屋番号を含む）・線を消去しますか？')){snapshot();items=[];draw();save()}};['date','time'].forEach(id=>$(id).addEventListener('change',save));$('locate').onclick=()=>{if(!navigator.geolocation){toast('位置情報に対応していません');return}navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],17),e=>toast('現在地を取得できません。Safariの位置情報設定をご確認ください'),{enableHighAccuracy:true,timeout:12000})};
 function drawRoomsForShare(ctx) {
   if (!openApartment || roomSheet.hidden) return;
   const x = roomSheet.offsetLeft;
