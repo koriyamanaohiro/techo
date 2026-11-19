@@ -5,14 +5,14 @@
 .apartmentPin span{min-width:25px;height:25px;padding:0 2px;border:3px solid #d93d35;border-radius:2px;background:#fffefa;color:#aa2823;display:grid;place-items:center;font:700 12px system-ui}
 #apartmentPins.inactive .apartmentPin{pointer-events:none}
 #apartmentTool{color:#d93d35}
-#rooms{position:absolute;z-index:880;width:min(104px,100%);max-height:55%;overflow:auto;background:#fffefa;border:1px solid #a6b8ad;border-radius:9px;padding:4px;box-shadow:0 2px 9px #0003}
-#rooms[hidden]{display:none}
-#rooms header{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:13px;font-weight:700}
-#closeRooms{min-height:25px;padding:0 4px;font-size:14px}
-#roomTitle{touch-action:none;user-select:none;cursor:grab;flex:1;padding-block:4px}
-#rooms input{display:block;width:100%;min-height:34px;margin:3px 0;border:1px solid #a6b8ad;border-radius:4px;padding:3px 6px;font-size:16px}
-#addRoom{min-height:30px;margin-top:4px}
-</style></head><body><div id="app"><div id="toolbar"><div class="line"><div class="page-nav"><button id="prev" aria-label="前のページ">◁</button><select id="page" aria-label="ページ選択"></select><button id="next" aria-label="次のページ">▷</button></div><span class="label">日付</span><input type="date" id="date"><span class="label">時刻</span><input type="time" id="time"><button id="locate">現在地</button></div><div class="line"><button data-mode="move" class="active">移動</button><button data-mode="circle">丸印</button><button data-mode="line">線</button><button data-mode="erase">消しゴム</button><button class="color active" data-color="red" aria-label="丸印の色 赤"><span class="dot"></span></button><button class="color" data-color="blue" aria-label="丸印の色 青"><span class="dot"></span></button><button class="color" data-color="green" aria-label="丸印の色 緑"><span class="dot"></span></button><button id="apartmentTool" data-mode="apartment" aria-label="アパートの印を付ける">□</button></div><div class="line"><button id="memoToggle">メモ</button><button id="undo">戻す</button><button id="clear">消去</button><button id="share" class="share">LINE転送</button></div></div><div id="mapWrap"><div id="map"></div><svg id="draw" xmlns="http://www.w3.org/2000/svg"></svg><div id="apartmentPins"></div><section id="rooms" hidden aria-label="会えた部屋番号"><header><span id="roomTitle">会えた番号</span><button id="closeRooms" aria-label="部屋番号表を閉じる">×</button></header><div id="roomRows"></div><button id="addRoom" aria-label="行を追加">＋</button></section><div id="memoBox"><div id="memoHandle"><span>☰ メモを移動</span><span>↘で大きさ変更</span></div><textarea id="memoText" placeholder="ここにメモを書く"></textarea><div id="memoResize" aria-label="メモ欄の大きさ変更"></div></div><div id="hint">移動：1本指で移動・2本指で拡大縮小</div></div></div><div id="notice"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
+.roomSheet{position:absolute;z-index:880;width:min(104px,100%);max-height:55%;overflow:auto;background:#fffefa;border:1px solid #a6b8ad;border-radius:9px;padding:4px;box-shadow:0 2px 9px #0003}
+.roomSheet[hidden]{display:none}
+.roomSheet header{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:13px;font-weight:700}
+.closeRooms{min-height:25px;padding:0 4px;font-size:14px}
+.roomTitle{touch-action:none;user-select:none;cursor:grab;flex:1;padding-block:4px}
+.roomSheet input{display:block;width:100%;min-height:34px;margin:3px 0;border:1px solid #a6b8ad;border-radius:4px;padding:3px 6px;font-size:16px}
+.addRoom{min-height:30px;margin-top:4px}
+</style></head><body><div id="app"><div id="toolbar"><div class="line"><div class="page-nav"><button id="prev" aria-label="前のページ">◁</button><select id="page" aria-label="ページ選択"></select><button id="next" aria-label="次のページ">▷</button></div><span class="label">日付</span><input type="date" id="date"><span class="label">時刻</span><input type="time" id="time"><button id="locate">現在地</button></div><div class="line"><button data-mode="move" class="active">移動</button><button data-mode="circle">丸印</button><button data-mode="line">線</button><button data-mode="erase">消しゴム</button><button class="color active" data-color="red" aria-label="丸印の色 赤"><span class="dot"></span></button><button class="color" data-color="blue" aria-label="丸印の色 青"><span class="dot"></span></button><button class="color" data-color="green" aria-label="丸印の色 緑"><span class="dot"></span></button><button id="apartmentTool" data-mode="apartment" aria-label="アパートの印を付ける">□</button></div><div class="line"><button id="memoToggle">メモ</button><button id="undo">戻す</button><button id="clear">消去</button><button id="share" class="share">LINE転送</button></div></div><div id="mapWrap"><div id="map"></div><svg id="draw" xmlns="http://www.w3.org/2000/svg"></svg><div id="apartmentPins"></div><template id="roomTemplate"><section class="roomSheet" aria-label="会えた部屋番号"><header><span class="roomTitle">会えた番号</span><button class="closeRooms" aria-label="部屋番号表を閉じる">×</button></header><div class="roomRows"></div><button class="addRoom" aria-label="行を追加">＋</button></section></template><div id="memoBox"><div id="memoHandle"><span>☰ メモを移動</span><span>↘で大きさ変更</span></div><textarea id="memoText" placeholder="ここにメモを書く"></textarea><div id="memoResize" aria-label="メモ欄の大きさ変更"></div></div><div id="hint">移動：1本指で移動・2本指で拡大縮小</div></div></div><div id="notice"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
 (()=>{'use strict';const $=id=>document.getElementById(id), svg=$('draw');const lineColor='#b89269';const palette={red:'#d93d35',blue:'#197bd3',green:'#229852'};let mode='move',color='red',items=[],history=[],draft=null,pointer=null;const storage='map-note-v2';const now=new Date(),local=new Date(now.getTime()-now.getTimezoneOffset()*60000);$('date').value=local.toISOString().slice(0,10);$('time').value=local.toISOString().slice(11,16);let saved={};try{saved=JSON.parse(localStorage.getItem(storage)||'{}')}catch(e){}
 const blank=()=>({items:[],date:local.toISOString().slice(0,10),time:local.toISOString().slice(11,16),center:[38.259,140.886],zoom:15,memo:{text:"",x:16,y:65,w:240,h:150,visible:true}});
 let pages=Array.from({length:20},blank),pageIndex=0;
@@ -41,7 +41,7 @@ let current=pages[pageIndex];items=Array.isArray(current.items)?current.items:[]
 $('date').value=current.date||blank().date;$('time').value=current.time||blank().time;
 const center=Array.isArray(current.center)?current.center:[38.259,140.886];
 const map=L.map('map',{zoomControl:true,preferCanvas:false,touchZoom:true,zoomSnap:0,zoomDelta:1,maxZoom:21}).setView(center,current.zoom||15);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxNativeZoom:19,maxZoom:21,crossOrigin:true}).addTo(map);const save=()=>{pages[pageIndex]={nextApartmentNumber:pages[pageIndex].nextApartmentNumber,items:JSON.parse(JSON.stringify(items)),date:$('date').value,time:$('time').value,center:[map.getCenter().lat,map.getCenter().lng],zoom:map.getZoom(),memo:getMemo()};try{localStorage.setItem(storage,JSON.stringify({pages,pageIndex}))}catch(e){toast('保存容量を超えました')}};
-function switchPage(i){i=Number(i);if(i<0||i>=20||i===pageIndex)return;closeRooms();save();pageIndex=i;current=pages[i];items=Array.isArray(current.items)?JSON.parse(JSON.stringify(current.items)):[];history=[];draft=null;pointer=null;$('date').value=current.date||blank().date;$('time').value=current.time||blank().time;applyMemo(current.memo);$('page').value=String(i);$('prev').disabled=i===0;$('next').disabled=i===19;map.setView(Array.isArray(current.center)?current.center:[38.259,140.886],current.zoom||15,{animate:false});draw();save()}
+function switchPage(i){i=Number(i);if(i<0||i>=20||i===pageIndex)return;leaveRoomPage();save();pageIndex=i;current=pages[i];items=Array.isArray(current.items)?JSON.parse(JSON.stringify(current.items)):[];history=[];draft=null;pointer=null;$('date').value=current.date||blank().date;$('time').value=current.time||blank().time;applyMemo(current.memo);$('page').value=String(i);$('prev').disabled=i===0;$('next').disabled=i===19;map.setView(Array.isArray(current.center)?current.center:[38.259,140.886],current.zoom||15,{animate:false});restoreRoomPage();draw();save()}
 $('page').value=String(pageIndex);$('prev').disabled=pageIndex===0;$('next').disabled=pageIndex===19;
 $('page').addEventListener('change',e=>switchPage(e.target.value));$('prev').onclick=()=>switchPage(pageIndex-1);$('next').onclick=()=>switchPage(pageIndex+1);
 const memoBox=$('memoBox'),memoText=$('memoText'),mapWrap=$('mapWrap');
@@ -51,28 +51,31 @@ $('memoToggle').onclick=()=>{memoBox.classList.toggle('hidden');$('memoToggle').
 function gesture(handle,resize){let state=null;handle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();state={id:e.pointerId,x:e.clientX,y:e.clientY,left:memoBox.offsetLeft,top:memoBox.offsetTop,w:memoBox.offsetWidth,h:memoBox.offsetHeight};handle.setPointerCapture(e.pointerId)});handle.addEventListener('pointermove',e=>{if(!state||e.pointerId!==state.id)return;const dx=e.clientX-state.x,dy=e.clientY-state.y;if(resize){memoBox.style.width=Math.max(150,Math.min(mapWrap.clientWidth-state.left,state.w+dx))+'px';memoBox.style.height=Math.max(90,Math.min(mapWrap.clientHeight-state.top,state.h+dy))+'px'}else{memoBox.style.left=Math.max(0,Math.min(mapWrap.clientWidth-state.w,state.left+dx))+'px';memoBox.style.top=Math.max(0,Math.min(mapWrap.clientHeight-state.h,state.top+dy))+'px'}});const finish=e=>{if(state&&e.pointerId===state.id){state=null;save()}};handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish)}
 gesture($('memoHandle'),false);gesture($('memoResize'),true);memoBox.addEventListener('pointerdown',e=>e.stopPropagation());applyMemo({...current.memo,visible:true});
 const pins = $('apartmentPins');
-const roomSheet = $('rooms');
-let openApartment = null;
+const roomSheets = new Map();
+const openRoomsByPage = new Map();
 
-function closeRooms() {
-  openApartment = null;
-  roomSheet.hidden = true;
-}
-function positionRooms() {
-  if (!openApartment) return;
-  if (!items.includes(openApartment)) {
-    closeRooms();
-    return;
-  }
-  const [x,y] = screen(openApartment.points[0]);
+function positionRoomSheet(apartment, roomSheet) {
+  const [x,y] = screen(apartment.points[0]);
 
   const below = y + 22;
   const top = below + roomSheet.offsetHeight <= mapWrap.clientHeight ? below : y - 22 - roomSheet.offsetHeight;
-  const [left, sheetTop] = openApartment.sheetPosition || [x + 20, top];
+  const [left, sheetTop] = apartment.sheetPosition || [x + 20, top];
   roomSheet.style.left = Math.max(0, Math.min(left, mapWrap.clientWidth - roomSheet.offsetWidth)) + 'px';
   roomSheet.style.top = Math.max(0, Math.min(sheetTop, mapWrap.clientHeight - roomSheet.offsetHeight)) + 'px';
 }
-function appendRoomRow(apartment, index) {
+function positionRooms() {
+  for (const [apartment, sheet] of roomSheets) {
+    if (items.includes(apartment)) {
+      positionRoomSheet(apartment,sheet);
+      continue;
+    }
+    sheet.remove();
+    roomSheets.delete(apartment);
+    const restored = items.find(item => item.type === 'apartment' && item.number === apartment.number);
+    if (restored) openRooms(restored);
+  }
+}
+function appendRoomRow(apartment, index, rows) {
   const input = document.createElement('input');
   input.type = 'text';
   input.autocomplete = 'off';
@@ -82,48 +85,64 @@ function appendRoomRow(apartment, index) {
     apartment.rooms[index] = input.value;
     save();
   };
-  $('roomRows').append(input);
+  rows.append(input);
   return input;
 }
-function toggleRooms(apartment) {
-  if (openApartment === apartment) {
-    closeRooms();
+function openRooms(apartment) {
+  const existing = roomSheets.get(apartment);
+  if (existing) {
+    roomSheets.delete(apartment);
+    roomSheets.set(apartment,existing);
+    mapWrap.append(existing);
     return;
   }
-  openApartment = apartment;
-  $('roomTitle').textContent = roomTitle(apartment);
-  $('roomRows').replaceChildren();
-  apartment.rooms.forEach((_, index) => appendRoomRow(apartment,index));
-  roomSheet.hidden = false;
-  positionRooms();
-}
-const roomTitleHandle = $('roomTitle');
-let roomDrag;
-roomTitleHandle.onpointerdown = event => {
-  if (!event.isPrimary || event.button !== 0 || !openApartment) return;
-  roomDrag = {
-    id:event.pointerId, apartment:openApartment,
-    x:event.clientX-roomSheet.offsetLeft, y:event.clientY-roomSheet.offsetTop
+  const sheet = $('roomTemplate').content.firstElementChild.cloneNode(true);
+  const handle = sheet.querySelector('.roomTitle');
+  const rows = sheet.querySelector('.roomRows');
+  handle.textContent = roomTitle(apartment);
+  apartment.rooms.forEach((_,index) => appendRoomRow(apartment,index,rows));
+  sheet.querySelector('.closeRooms').onclick = () => {
+    sheet.remove();
+    roomSheets.delete(apartment);
   };
-  roomTitleHandle.setPointerCapture(event.pointerId);
-};
-roomTitleHandle.onpointermove = event => {
-  if (roomDrag?.id !== event.pointerId || openApartment !== roomDrag.apartment) return;
-  openApartment.sheetPosition = [event.clientX-roomDrag.x,event.clientY-roomDrag.y];
-  positionRooms();
-};
-roomTitleHandle.onpointerup = roomTitleHandle.onpointercancel = roomTitleHandle.onlostpointercapture = event => {
-  if (roomDrag?.id !== event.pointerId) return;
-  roomDrag = null;
-  save();
-};
-$('closeRooms').onclick = closeRooms;
-$('addRoom').onclick = () => {
-  const index = openApartment.rooms.push('') - 1;
-  appendRoomRow(openApartment,index).focus();
-  positionRooms();
-  save();
-};
+  sheet.querySelector('.addRoom').onclick = () => {
+    const index = apartment.rooms.push('') - 1;
+    appendRoomRow(apartment,index,rows).focus();
+    positionRoomSheet(apartment,sheet);
+    save();
+  };
+  let drag;
+  handle.onpointerdown = event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    drag = {id:event.pointerId,x:event.clientX-sheet.offsetLeft,y:event.clientY-sheet.offsetTop};
+    handle.setPointerCapture(event.pointerId);
+  };
+  handle.onpointermove = event => {
+    if (drag?.id !== event.pointerId) return;
+    apartment.sheetPosition = [event.clientX-drag.x,event.clientY-drag.y];
+    positionRoomSheet(apartment,sheet);
+  };
+  handle.onpointerup = handle.onpointercancel = handle.onlostpointercapture = event => {
+    if (drag?.id !== event.pointerId) return;
+    drag = null;
+    save();
+  };
+  mapWrap.append(sheet);
+  roomSheets.set(apartment,sheet);
+  positionRoomSheet(apartment,sheet);
+}
+function leaveRoomPage() {
+  openRoomsByPage.set(pageIndex,new Set([...roomSheets.keys()].map(item => item.number)));
+  for (const sheet of roomSheets.values()) sheet.remove();
+  roomSheets.clear();
+}
+function restoreRoomPage() {
+  const openNumbers = openRoomsByPage.get(pageIndex);
+  if (!openNumbers) return;
+  for (const item of items) {
+    if (item.type === 'apartment' && openNumbers.has(item.number)) openRooms(item);
+  }
+}
 function roomTitle(apartment) {
   return apartment.number + ' 会えた番号';
 }
@@ -136,13 +155,13 @@ function drawApartment(apartment) {
   const number = document.createElement('span');
   number.textContent = apartment.number;
   button.append(number);
-  button.setAttribute('aria-label', 'アパート ' + apartment.number + ' の部屋番号を表示・非表示');
+  button.setAttribute('aria-label', 'アパート ' + apartment.number + ' の部屋番号を表示');
   button.tabIndex = pins.classList.contains('inactive') ? -1 : 0;
-  button.onclick = () => toggleRooms(apartment);
+  button.onclick = () => openRooms(apartment);
   pins.append(button);
 }
 const toast=s=>{const n=$('notice');n.textContent=s;n.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.style.display='none',2800)};const point=e=>{const r=svg.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]};const geo=p=>{const v=map.containerPointToLatLng(L.point(p[0],p[1]));return [v.lat,v.lng]};const screen=p=>{const v=map.latLngToContainerPoint(L.latLng(p[0],p[1]));return [v.x,v.y]};const snapshot=()=>history.push(JSON.stringify(items));function draw(){svg.replaceChildren();pins.replaceChildren();const ns='http://www.w3.org/2000/svg';for(const it of [...items,...(draft?[draft]:[])]){if(it.type==='apartment'){drawApartment(it)}else if(it.type==='circle'){const p=screen(it.points[0]),el=document.createElementNS(ns,'circle');el.setAttribute('cx',p[0]);el.setAttribute('cy',p[1]);el.setAttribute('r',13);el.setAttribute('fill','none');el.setAttribute('stroke',palette[it.color]||palette.red);el.setAttribute('stroke-width','4');svg.appendChild(el)}else if(it.points.length){const el=document.createElementNS(ns,'polyline');el.setAttribute('points',it.points.map(p=>screen(p).join(',')).join(' '));el.setAttribute('fill','none');el.setAttribute('stroke',lineColor);el.setAttribute('stroke-width','4');el.setAttribute('stroke-linecap','round');el.setAttribute('stroke-linejoin','round');svg.appendChild(el)}}positionRooms();$('undo').disabled=!history.length;$('clear').disabled=!items.length}
-function setMode(m){mode=m;const allowPins=m==='move'||m==='apartment';pins.classList.toggle('inactive',!allowPins);if(!allowPins)closeRooms();for(const pin of pins.children)pin.tabIndex=allowPins?0:-1;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));svg.style.pointerEvents=m==='move'?'none':'auto';map.dragging[m==='move'?'enable':'disable']();map.touchZoom[m==='move'?'enable':'disable']();map.doubleClickZoom[m==='move'?'enable':'disable']();$('hint').textContent={move:'移動：1本指で移動・2本指で拡大縮小',circle:'丸印：地図をタップ',apartment:'アパート：地図をタップして赤い□を置く',line:'線：指でなぞる',erase:'消しゴム：印や線をタップ／なぞる'}[m]}
+function setMode(m){mode=m;const allowPins=m==='move'||m==='apartment';pins.classList.toggle('inactive',!allowPins);for(const pin of pins.children)pin.tabIndex=allowPins?0:-1;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));svg.style.pointerEvents=m==='move'?'none':'auto';map.dragging[m==='move'?'enable':'disable']();map.touchZoom[m==='move'?'enable':'disable']();map.doubleClickZoom[m==='move'?'enable':'disable']();$('hint').textContent={move:'移動：1本指で移動・2本指で拡大縮小',circle:'丸印：地図をタップ',apartment:'アパート：地図をタップして赤い□を置く',line:'線：指でなぞる',erase:'消しゴム：印や線をタップ／なぞる'}[m]}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));document.querySelectorAll('[data-color]').forEach(b=>b.onclick=()=>{color=b.dataset.color;document.querySelectorAll('[data-color]').forEach(x=>x.classList.toggle('active',x===b))});const dist=(p,a,b)=>{let dx=b[0]-a[0],dy=b[1]-a[1],t=dx*dx+dy*dy?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy))):0;return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)};function erase(p){for(let i=items.length-1;i>=0;i--){const it=items[i],pts=it.points.map(screen);let hit=it.type==='apartment'?Math.hypot(p[0]-pts[0][0],p[1]-pts[0][1])<=20:it.type==='circle'?Math.abs(Math.hypot(p[0]-pts[0][0],p[1]-pts[0][1])-13)<13:pts.some((q,j)=>j>0&&dist(p,pts[j-1],q)<13);if(hit){snapshot();items.splice(i,1);draw();save();return}}}
 svg.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&!e.isPrimary)return;e.preventDefault();svg.setPointerCapture(e.pointerId);pointer=e.pointerId;const p=point(e);if(mode==='erase'){erase(p)}else if(mode==='circle'){snapshot();items.push({type:'circle',color,points:[geo(p)]});draw();save()}else if(mode==='line'){snapshot();draft={type:'line',color,points:[geo(p)]};draw()}});svg.addEventListener('pointermove',e=>{if(pointer!==e.pointerId)return;const p=point(e);if(mode==='erase')erase(p);if(mode==='line'&&draft){const prev=screen(draft.points.at(-1));if(Math.hypot(prev[0]-p[0],prev[1]-p[1])>3){draft.points.push(geo(p));draw()}}});function finish(e){if(pointer!==e.pointerId)return;pointer=null;
 if(mode==='apartment' && e.type==='pointerup'){
@@ -153,8 +172,7 @@ if(mode==='apartment' && e.type==='pointerup'){
   save();
 }
 if(draft){if(draft.points.length===1)draft.points.push(draft.points[0]);items.push(draft);draft=null;draw();save()}}svg.addEventListener('pointerup',finish);svg.addEventListener('pointercancel',finish);map.on('move zoom resize',draw);map.on('moveend zoomend',save);$('undo').onclick=()=>{if(history.length){items=JSON.parse(history.pop());draw();save()}};$('clear').onclick=()=>{if(items.length&&confirm('すべての丸印・アパートの印（部屋番号を含む）・線を消去しますか？')){snapshot();items=[];draw();save()}};['date','time'].forEach(id=>$(id).addEventListener('change',save));$('locate').onclick=()=>{if(!navigator.geolocation){toast('位置情報に対応していません');return}navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],17),e=>toast('現在地を取得できません。Safariの位置情報設定をご確認ください'),{enableHighAccuracy:true,timeout:12000})};
-function drawRoomsForShare(ctx) {
-  if (!openApartment || roomSheet.hidden) return;
+function drawRoomSheetForShare(ctx, openApartment, roomSheet) {
   const x = roomSheet.offsetLeft;
   const y = roomSheet.offsetTop;
   const width = roomSheet.offsetWidth;
@@ -175,7 +193,7 @@ function drawRoomsForShare(ctx) {
   ctx.fillText(roomTitle(openApartment),x+5,y+header.top-sheetBounds.top+17,width-10);
   ctx.font = '16px sans-serif';
   ctx.textBaseline = 'middle';
-  for (const input of $('roomRows').querySelectorAll('input')) {
+  for (const input of roomSheet.querySelectorAll('.roomRows input')) {
     const box = input.getBoundingClientRect();
     const left = x + box.left - sheetBounds.left;
     const top = y + box.top - sheetBounds.top;
@@ -199,6 +217,6 @@ async function exportImage(){const w=map.getSize().x,h=map.getSize().y,scale=Mat
   ctx.fillText(String(it.number),x,y);
   ctx.restore();
   continue;
-}else if(it.type==='circle')ctx.arc(pts[0][0],pts[0][1],13,0,Math.PI*2);else pts.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke()}if(!memoBox.classList.contains('hidden')){const m=getMemo();ctx.fillStyle='rgba(255,254,240,0.92)';ctx.fillRect(m.x,m.y,m.w,m.h);ctx.strokeStyle='#668e7c';ctx.lineWidth=2;ctx.strokeRect(m.x,m.y,m.w,m.h);ctx.fillStyle='#d8e8dd';ctx.fillRect(m.x,m.y,m.w,28);ctx.fillStyle='#203d35';ctx.font='bold 13px sans-serif';ctx.fillText('メモ',m.x+9,m.y+19);ctx.font='16px sans-serif';const maxWidth=m.w-16;let yy=m.y+48;for(const raw of m.text.split('\n')){let line='';for(const ch of raw){if(ctx.measureText(line+ch).width>maxWidth&&line){if(yy<m.y+m.h-8)ctx.fillText(line,m.x+8,yy);yy+=23;line=''}line+=ch}if(yy<m.y+m.h-8)ctx.fillText(line,m.x+8,yy);yy+=23}}drawRoomsForShare(ctx);ctx.fillStyle='#fffdf7';ctx.fillRect(0,h,w,58);ctx.fillStyle='#203d35';ctx.font='bold 16px -apple-system,sans-serif';ctx.fillText(`${$('date').value}  ${$('time').value}`,12,h+25);ctx.font='12px -apple-system,sans-serif';ctx.fillText('© OpenStreetMap contributors',12,h+46);return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error('画像を生成できません')),'image/png'))}
+}else if(it.type==='circle')ctx.arc(pts[0][0],pts[0][1],13,0,Math.PI*2);else pts.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke()}if(!memoBox.classList.contains('hidden')){const m=getMemo();ctx.fillStyle='rgba(255,254,240,0.92)';ctx.fillRect(m.x,m.y,m.w,m.h);ctx.strokeStyle='#668e7c';ctx.lineWidth=2;ctx.strokeRect(m.x,m.y,m.w,m.h);ctx.fillStyle='#d8e8dd';ctx.fillRect(m.x,m.y,m.w,28);ctx.fillStyle='#203d35';ctx.font='bold 13px sans-serif';ctx.fillText('メモ',m.x+9,m.y+19);ctx.font='16px sans-serif';const maxWidth=m.w-16;let yy=m.y+48;for(const raw of m.text.split('\n')){let line='';for(const ch of raw){if(ctx.measureText(line+ch).width>maxWidth&&line){if(yy<m.y+m.h-8)ctx.fillText(line,m.x+8,yy);yy+=23;line=''}line+=ch}if(yy<m.y+m.h-8)ctx.fillText(line,m.x+8,yy);yy+=23}}for(const [apartment,sheet] of roomSheets) drawRoomSheetForShare(ctx,apartment,sheet);ctx.fillStyle='#fffdf7';ctx.fillRect(0,h,w,58);ctx.fillStyle='#203d35';ctx.font='bold 16px -apple-system,sans-serif';ctx.fillText(`${$('date').value}  ${$('time').value}`,12,h+25);ctx.font='12px -apple-system,sans-serif';ctx.fillText('© OpenStreetMap contributors',12,h+46);return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error('画像を生成できません')),'image/png'))}
 $('share').onclick=async()=>{const b=$('share');b.disabled=true;b.textContent='画像作成中…';try{const blob=await exportImage(),file=new File([blob],`map-note-${pageIndex+1}.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})&&navigator.share){try{await navigator.share({files:[file],title:'地図ノート'});return}catch(e){if(e.name==='AbortError')return}}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`map-note-${pageIndex+1}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);toast('画像を保存しました。LINEで添付してください')}catch(e){toast('画像共有に失敗しました。地図が読み込まれているか確認してください')}finally{b.disabled=false;b.textContent='LINE転送'}};setMode('move');draw();setTimeout(()=>map.invalidateSize(),250)})();
 </script></body></html>
