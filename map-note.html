@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#163d35">
+<title>地図ノート</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+*{box-sizing:border-box} [hidden]{display:none!important}
+:root{font:16px system-ui,sans-serif;color:#173a33;background:#f3f5ee}
+body{margin:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+main{height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:320px;display:flex;flex-direction:column}
+header,.toolbar{display:flex;align-items:center;gap:6px;padding:8px 10px}
+header{justify-content:space-between;background:#163d35;color:white}
+h1{font-size:20px;margin:0}
+button,a.download{font:inherit;color:inherit;border:1px solid #a9bcb2;background:#fff;border-radius:8px;min-height:42px;padding:6px 9px;cursor:pointer;white-space:nowrap}
+header button,.primary{background:#216b53;color:white;border-color:#81a798}
+.toolbar{overflow-x:auto}.toolbar button{flex:none;font-size:14px}
+button[aria-pressed=true]{background:#216b53;color:white;border-color:#216b53}button:disabled{opacity:.45}
+.mapFrame{position:relative;flex:1;min-height:0;background:#e3e8dd}
+#map,#inkSurface{position:absolute;inset:0}
+#inkSurface{z-index:1100;touch-action:none;user-select:none;-webkit-touch-callout:none;cursor:crosshair}
+#hint{margin:0;padding:4px 10px;font-size:13px;min-height:26px}
+dialog{border:1px solid #a9bcb2;border-radius:14px;background:#f3f5ee;color:inherit;width:min(92vw,520px);max-height:92dvh}
+dialog::backdrop{background:#142d2799}dialog h2{margin:0;font-size:18px}
+dialog img{display:block;max-width:100%;max-height:48dvh;margin:8px auto;background:#e3e8dd}
+.shareControls{display:flex;gap:8px;flex-wrap:wrap}
+a.download{display:inline-flex;align-items:center;text-decoration:none}
+</style>
+</head>
+<body>
+<main>
+<header><h1>地図ノート</h1><button id="share" disabled>共有</button></header>
+<div class="toolbar" role="group" aria-label="地図の操作">
+<button id="locate" disabled>現在地</button>
+<button data-mode="move" aria-pressed="true" disabled>移動</button>
+<button data-mode="circle" aria-pressed="false" disabled>丸印</button>
+<button data-mode="line" aria-pressed="false" disabled>線</button>
+<button data-mode="erase" aria-pressed="false" disabled>消しゴム</button>
+</div>
+<p id="hint" role="status">地図を読み込み中…</p>
+<div class="mapFrame"><div id="map" aria-label="地図"></div><div id="inkSurface" hidden></div></div>
+</main>
+<dialog id="shareDialog">
+<h2>地図を画像で共有</h2>
+<p id="shareStatus" role="status"></p>
+<img id="preview" alt="丸印と線を含む地図画像" hidden>
+<div class="shareControls">
+<button id="send" class="primary" hidden>共有先を選ぶ</button>
+<a id="download" class="download" download="map-note.png" hidden>画像を保存</a>
+<button id="close">閉じる</button>
+</div>
+</dialog>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const modes = document.querySelectorAll('[data-mode]');
+const surface = $('inkSurface');
+const storageKey = 'map-note-v1';
+const centerDefault = [38.2682, 140.8694, 14];
+const styles = {
+  circle:{color:'#c5433d', weight:3, fill:false, interactive:false},
+  line:{color:'#b89269', weight:4, opacity:.9, interactive:false}
+};
+const hints = {move:'1本指で移動、2本指で拡大・縮小',circle:'地図をタップして丸印を付ける',line:'指でなぞって線を引く',erase:'丸印や線に触れて消す'};
+let map, ink, tiles, draft, gesture, file, previewUrl;
+let mode = 'move';
+let notes = [];
+let savedView = centerDefault;
+let positionRequest = 0;
+
+function save() {
+  const center = map.getCenter();
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({notes, view:[center.lat, center.lng, map.getZoom()]}));
+  } catch {
+    $('hint').textContent = '端末への保存に失敗しました。共有から画像を保存できます。';
+  }
+}
+function radius() {
+  return Math.max(4, Math.min(12, 12 - (19 - map.getZoom()) * 3));
+}
+function drawNotes() {
+  ink.clearLayers();
+  for (const note of notes) {
+    const layer = note.type === 'circle'
+      ? L.circleMarker(note.points[0], {...styles.circle, radius:radius()})
+      : L.polyline(note.points, styles.line);
+    layer.addTo(ink);
+  }
+}
+function setMode(next) {
+  if (gesture) finish(false);
+  mode = next;
+  for (const button of modes) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+  surface.hidden = mode === 'move';
+  $('hint').textContent = hints[mode];
+}
+function roundedPoint(point) {
+  const {lat,lng} = map.containerPointToLatLng(point);
+  return [Number(lat.toFixed(7)),Number(lng.toFixed(7))];
+}
+function eraseAt(point) {
+  let bestDistance = 16;
+  let nearest = -1;
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const {type,points} = notes[i];
+    const pixels = points.map(pair => map.latLngToContainerPoint(pair));
+    const distance = type === 'circle'
+      ? Math.max(0, point.distanceTo(pixels[0]) - radius())
+      : pixels.slice(1).reduce((best, end, j) => Math.min(best, L.LineUtil.pointToSegmentDistance(point,pixels[j],end)), Infinity);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      nearest = i;
+    }
+  }
+  if (nearest < 0) return;
+  notes.splice(nearest,1);
+  drawNotes();
+  save();
+}
+function addPoint(point, minimumDistance) {
+  if (gesture.last.distanceTo(point) <= minimumDistance) return;
+  gesture.last = point;
+  const pair = roundedPoint(point);
+  gesture.points.push(pair);
+  draft.addLatLng(pair);
+}
+function finish(commit) {
+  const current = gesture;
+  if (!current) return;
+  gesture = null;
+  if (surface.hasPointerCapture(current.id)) surface.releasePointerCapture(current.id);
+  if (draft) draft.remove();
+  draft = null;
+  if (!commit || (mode === 'line' && current.points.length < 2)) return;
+  notes.push({type:mode, points:current.points});
+  drawNotes();
+  save();
+}
+surface.onpointerdown = event => {
+  if (!event.isPrimary || event.button !== 0 || gesture) return;
+  positionRequest++;
+  const point = map.mouseEventToContainerPoint(event);
+  if (mode === 'erase') {
+    eraseAt(point);
+    return;
+  }
+  map.stop();
+  gesture = {id:event.pointerId, points:[roundedPoint(point)], last:point};
+  surface.setPointerCapture(event.pointerId);
+  if (mode === 'line') draft = L.polyline(gesture.points,styles.line).addTo(ink);
+};
+surface.onpointermove = event => {
+  if (mode === 'line' && gesture?.id === event.pointerId) addPoint(map.mouseEventToContainerPoint(event),2);
+};
+surface.onpointerup = event => {
+  if (gesture?.id !== event.pointerId) return;
+  if (mode === 'line') addPoint(map.mouseEventToContainerPoint(event),0);
+  finish(true);
+};
+surface.onpointercancel = surface.onlostpointercapture = event => {
+  if (gesture?.id === event.pointerId) finish(false);
+};
+surface.oncontextmenu = event => event.preventDefault();
+
+function captureMap() {
+  const size = map.getSize();
+  const canvas = document.createElement('canvas');
+  canvas.width = size.x * 2;
+  canvas.height = size.y * 2;
+  const context = canvas.getContext('2d');
+  context.scale(2,2);
+  context.fillStyle = '#e3e8dd';
+  context.fillRect(0,0,size.x,size.y);
+  const bounds = $('map').getBoundingClientRect();
+  let capturedTiles = 0;
+  for (const tile of tiles.getContainer().querySelectorAll('img.leaflet-tile-loaded')) {
+    if (!tile.complete || !tile.naturalWidth) continue;
+    const box = tile.getBoundingClientRect();
+    if (box.right <= bounds.left || box.left >= bounds.right ||
+        box.bottom <= bounds.top || box.top >= bounds.bottom) continue;
+    context.drawImage(tile,box.left-bounds.left,box.top-bounds.top,box.width,box.height);
+    capturedTiles++;
+  }
+  if (!capturedTiles) throw new Error('地図が表示されてから共有してください。');
+  for (const note of notes) {
+    const pixels = note.points.map(pair => map.latLngToContainerPoint(pair));
+    const style = styles[note.type];
+    context.beginPath();
+    context.strokeStyle = style.color;
+    context.lineWidth = style.weight;
+    context.lineCap = context.lineJoin = 'round';
+    if (note.type === 'circle') context.arc(pixels[0].x,pixels[0].y,radius(),0,2*Math.PI);
+    else {
+      context.moveTo(pixels[0].x,pixels[0].y);
+      for (const point of pixels.slice(1)) context.lineTo(point.x,point.y);
+    }
+    context.stroke();
+  }
+  const credit = '© OpenStreetMap contributors';
+  context.font = '12px sans-serif';
+  const width = context.measureText(credit).width + 12;
+  context.fillStyle = '#fff';
+  context.fillRect(size.x-width,size.y-20,width,20);
+  context.fillStyle = '#173a33';
+  context.fillText(credit,size.x-width+6,size.y-6);
+  return new Promise((resolve,reject) => canvas.toBlob(blob => {
+    if (blob) resolve(new File([blob],'map-note.png',{type:'image/png'}));
+    else reject(new Error('地図画像を作成できませんでした。'));
+  },'image/png'));
+}
+$('share').onclick = async () => {
+  $('share').disabled = true;
+  try {
+    if (tiles.isLoading()) throw new Error('地図の読み込みが終わってから共有してください。');
+    file = await captureMap();
+    previewUrl = URL.createObjectURL(file);
+    $('preview').src = $('download').href = previewUrl;
+    $('preview').hidden = $('download').hidden = false;
+    const canSend = !!navigator.share && !!navigator.canShare?.({files:[file]});
+    $('send').hidden = !canSend;
+    $('shareStatus').textContent = canSend ? '共有先の一覧からLINEを選べます。' : '画像を保存してLINEに添付できます。';
+    $('shareDialog').showModal();
+  } catch (error) {
+    $('hint').textContent = error instanceof DOMException ? '地図画像を作成できませんでした。' : error.message;
+  } finally {
+    $('share').disabled = false;
+  }
+};
+$('send').onclick = async () => {
+  try {
+    await navigator.share({files:[file]});
+  } catch (error) {
+    if (error.name !== 'AbortError') $('shareStatus').textContent = '画像を保存してLINEに添付してください。';
+  }
+};
+$('close').onclick = () => $('shareDialog').close();
+$('shareDialog').onclose = () => {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  $('preview').removeAttribute('src');
+  $('download').removeAttribute('href');
+  file = previewUrl = null;
+};
+$('locate').onclick = () => {
+  if (!navigator.geolocation) {
+    $('hint').textContent = 'このブラウザでは現在地を取得できません。';
+    return;
+  }
+  setMode('move');
+  const request = ++positionRequest;
+  $('hint').textContent = '現在地を取得中…';
+  navigator.geolocation.getCurrentPosition(({coords}) => {
+    if (request !== positionRequest) return;
+    map.setView([coords.latitude,coords.longitude],17);
+    $('hint').textContent = hints.move;
+  }, () => {
+    if (request === positionRequest) $('hint').textContent = '現在地を取得できませんでした。地図を手で動かせます。';
+  }, {timeout:12000,maximumAge:60000});
+};
+addEventListener('DOMContentLoaded', () => {
+  if (!globalThis.L) {
+    $('hint').textContent = '地図を読み込めませんでした。通信を確認して再読み込みしてください。';
+    return;
+  }
+  try {
+    const data = JSON.parse(localStorage.getItem(storageKey));
+    if (Array.isArray(data?.notes)) notes = data.notes;
+    if (data?.view?.length === 3 && data.view.every(Number.isFinite)) savedView = data.view;
+  } catch {}
+  map = L.map('map',{maxZoom:21, zoomSnap:0, zoomDelta:1, worldCopyJump:true}).setView(savedView.slice(0,2),savedView[2]);
+  tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxNativeZoom:19,maxZoom:21,crossOrigin:'anonymous',
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  ink = L.layerGroup().addTo(map);
+  drawNotes();
+  map.on('zoomend',drawNotes);
+  map.on('moveend',save);
+  map.on('dragstart',() => { positionRequest++; });
+  for (const button of modes) {
+    button.disabled = false;
+    button.onclick = () => { positionRequest++; setMode(button.dataset.mode); };
+  }
+  $('locate').disabled = $('share').disabled = false;
+  setMode('move');
+});
+</script>
+</body>
+</html>
